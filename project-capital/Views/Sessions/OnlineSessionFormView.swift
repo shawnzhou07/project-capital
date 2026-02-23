@@ -140,7 +140,7 @@ struct OnlineSessionFormView: View {
                 Text("Blinds")
                     .foregroundColor(.appPrimary)
                 Spacer()
-                TextField("$1/$2", text: $blinds)
+                TextField("1/2", text: $blinds)
                     .multilineTextAlignment(.trailing)
                     .foregroundColor(.appGold)
             }

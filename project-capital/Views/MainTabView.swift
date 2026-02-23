@@ -2,6 +2,9 @@ import SwiftUI
 import CoreData
 
 struct MainTabView: View {
+    @Environment(\.managedObjectContext) private var viewContext
+    @StateObject private var sessionCoordinator = ActiveSessionCoordinator()
+
     init() {
         let tabBarAppearance = UITabBarAppearance()
         tabBarAppearance.configureWithOpaqueBackground()
@@ -51,6 +54,16 @@ struct MainTabView: View {
                 }
         }
         .tint(.appGold)
+        .environmentObject(sessionCoordinator)
+        .safeAreaInset(edge: .bottom) {
+            FloatingSessionBar()
+                .environmentObject(sessionCoordinator)
+        }
+        .fullScreenCover(isPresented: $sessionCoordinator.isFormPresented) {
+            SessionEntryContainerView()
+                .environmentObject(sessionCoordinator)
+                .environment(\.managedObjectContext, viewContext)
+        }
     }
 }
 

@@ -4,6 +4,7 @@ import Combine
 
 struct SessionsListView: View {
     @Environment(\.managedObjectContext) private var viewContext
+    @EnvironmentObject var sessionCoordinator: ActiveSessionCoordinator
     @AppStorage("baseCurrency") private var baseCurrency = "CAD"
 
     @FetchRequest(
@@ -21,7 +22,19 @@ struct SessionsListView: View {
         animation: .default
     ) private var platforms: FetchedResults<Platform>
 
-    @State private var showAddSession = false
+    @FetchRequest(
+        sortDescriptors: [],
+        predicate: NSPredicate(format: "startTime != nil AND endTime == nil"),
+        animation: .default
+    ) private var activeLiveSessions: FetchedResults<LiveCash>
+
+    @FetchRequest(
+        sortDescriptors: [],
+        predicate: NSPredicate(format: "startTime != nil AND endTime == nil"),
+        animation: .default
+    ) private var activeOnlineSessions: FetchedResults<OnlineCash>
+
+    @State private var showActiveSessionAlert = false
     @State private var filterType: FilterType = .all
     @State private var selectedPlatformFilter: Platform? = nil
     @State private var selectedGameTypeFilter: String? = nil
@@ -106,16 +119,22 @@ struct SessionsListView: View {
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        showAddSession = true
+                    Menu {
+                        Button {
+                            handleAddTap()
+                        } label: {
+                            Label("Cash Game", systemImage: "suit.spade.fill")
+                        }
                     } label: {
                         Image(systemName: "plus")
                             .foregroundColor(.appGold)
                     }
                 }
             }
-            .sheet(isPresented: $showAddSession) {
-                AddSessionView()
+            .alert("Active Session", isPresented: $showActiveSessionAlert) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("You have an active session in progress. Please complete or discard it before starting a new one.")
             }
             .alert("Delete Session?", isPresented: $showDeleteAlert) {
                 Button("Delete", role: .destructive) {
@@ -266,6 +285,14 @@ struct SessionsListView: View {
         .listRowSeparator(.hidden)
     }
 
+    func handleAddTap() {
+        if !activeLiveSessions.isEmpty || !activeOnlineSessions.isEmpty {
+            showActiveSessionAlert = true
+        } else {
+            sessionCoordinator.openCashGame()
+        }
+    }
+
     func performDelete() {
         if let s = deleteOnlineSession {
             viewContext.delete(s)
@@ -378,5 +405,6 @@ struct FilterChip: View {
 #Preview {
     SessionsListView()
         .environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
+        .environmentObject(ActiveSessionCoordinator())
         .preferredColorScheme(.dark)
 }

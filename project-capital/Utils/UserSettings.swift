@@ -46,11 +46,10 @@ let supportedCurrencies = ["CAD", "USD", "EUR", "GBP", "AUD", "MXN", "BTC", "ETH
 let gameTypes = [
     "No Limit Hold'em",
     "Pot Limit Omaha",
+    "Pot Limit Omaha 5",
     "Pot Limit Omaha Hi-Lo",
-    "Fixed Limit Hold'em",
-    "7-Card Stud",
-    "Mixed Games",
-    "Other"
+    "7 Card Stud",
+    "Mixed Games"
 ]
 
 let depositMethods = ["E-Transfer", "Bank Transfer", "Credit Card", "Crypto", "PayPal", "Other"]
