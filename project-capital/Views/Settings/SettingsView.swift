@@ -1,26 +1,32 @@
 import SwiftUI
+import CoreData
 
 struct SettingsView: View {
+    @Environment(\.managedObjectContext) private var viewContext
     @AppStorage("baseCurrency") private var baseCurrency = "CAD"
     @AppStorage("handsPerHourOnline") private var handsPerHourOnline = 85
     @AppStorage("handsPerHourLive") private var handsPerHourLive = 25
-    @AppStorage("showAdjustmentsInStats") private var showAdjustmentsInStats = true
+    @State private var showResetConfirmation = false
 
     var body: some View {
-        NavigationView {
-            ZStack {
-                Color.appBackground.ignoresSafeArea()
-                Form {
-                    baseCurrencySection
-                    handsSection
-                    statsSection
-                    aboutSection
-                }
-                .scrollContentBackground(.hidden)
-                .background(Color.appBackground)
+        ZStack {
+            Color.appBackground.ignoresSafeArea()
+            Form {
+                baseCurrencySection
+                handsSection
+                dataSection
+                aboutSection
             }
-            .navigationTitle("Settings")
-            .navigationBarTitleDisplayMode(.large)
+            .scrollContentBackground(.hidden)
+            .background(Color.appBackground)
+        }
+        .navigationTitle("Settings")
+        .navigationBarTitleDisplayMode(.large)
+        .alert("Reset All Data?", isPresented: $showResetConfirmation) {
+            Button("Reset Everything", role: .destructive) { performReset() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This will permanently delete all sessions, platforms, deposits, withdrawals, and adjustments. This cannot be undone.")
         }
     }
 
@@ -51,13 +57,8 @@ struct SettingsView: View {
     var handsSection: some View {
         Section {
             HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Hands/Hour — Online")
-                        .foregroundColor(.appPrimary)
-                    Text("Used when hands count is not entered")
-                        .font(.caption)
-                        .foregroundColor(.appSecondary)
-                }
+                Text("Hands Per Hour (Online)")
+                    .foregroundColor(.appPrimary)
                 Spacer()
                 Stepper("\(handsPerHourOnline)", value: $handsPerHourOnline, in: 10...200, step: 5)
                     .fixedSize()
@@ -66,13 +67,8 @@ struct SettingsView: View {
             .listRowBackground(Color.appSurface)
 
             HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Hands/Hour — Live")
-                        .foregroundColor(.appPrimary)
-                    Text("Used when hands count is not entered")
-                        .font(.caption)
-                        .foregroundColor(.appSecondary)
-                }
+                Text("Hands Per Hour (Live)")
+                    .foregroundColor(.appPrimary)
                 Spacer()
                 Stepper("\(handsPerHourLive)", value: $handsPerHourLive, in: 10...100, step: 5)
                     .fixedSize()
@@ -80,29 +76,50 @@ struct SettingsView: View {
             }
             .listRowBackground(Color.appSurface)
         } header: {
-            Text("Hands Per Hour").foregroundColor(.appGold).textCase(nil)
-        } footer: {
-            Text("Online default: 85/hr · Live default: 25/hr")
-                .font(.caption)
-                .foregroundColor(.appSecondary)
+            Text("Default Values").foregroundColor(.appGold).textCase(nil)
         }
     }
 
-    var statsSection: some View {
+    var dataSection: some View {
         Section {
-            Toggle(isOn: $showAdjustmentsInStats) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Show Adjustments in Stats")
+            Button {
+                exportData()
+            } label: {
+                HStack {
+                    Text("Export Data")
                         .foregroundColor(.appPrimary)
-                    Text("Include rakeback, bonuses, etc. in net result")
+                    Spacer()
+                    Image(systemName: "chevron.right")
                         .font(.caption)
                         .foregroundColor(.appSecondary)
                 }
             }
-            .tint(.appGold)
+            .listRowBackground(Color.appSurface)
+
+            Button {
+                importData()
+            } label: {
+                HStack {
+                    Text("Import Data")
+                        .foregroundColor(.appPrimary)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundColor(.appSecondary)
+                }
+            }
+            .listRowBackground(Color.appSurface)
+
+            Button {
+                showResetConfirmation = true
+            } label: {
+                Text("Reset All Data")
+                    .foregroundColor(.appLoss)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
             .listRowBackground(Color.appSurface)
         } header: {
-            Text("Statistics").foregroundColor(.appGold).textCase(nil)
+            Text("Data").foregroundColor(.appGold).textCase(nil)
         }
     }
 
@@ -138,9 +155,28 @@ struct SettingsView: View {
             Text("About").foregroundColor(.appGold).textCase(nil)
         }
     }
+
+    func exportData() {
+        // TODO: Implement data export
+    }
+
+    func importData() {
+        // TODO: Implement data import
+    }
+
+    func performReset() {
+        let entityNames = ["OnlineCash", "LiveCash", "Platform", "Deposit", "Withdrawal", "Adjustment"]
+        for name in entityNames {
+            let fetchRequest = NSFetchRequest<NSFetchRequestResult>(entityName: name)
+            let deleteRequest = NSBatchDeleteRequest(fetchRequest: fetchRequest)
+            try? viewContext.execute(deleteRequest)
+        }
+        try? viewContext.save()
+    }
 }
 
 #Preview {
     SettingsView()
+        .environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
         .preferredColorScheme(.dark)
 }

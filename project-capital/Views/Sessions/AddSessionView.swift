@@ -7,7 +7,7 @@ struct AddSessionView: View {
     enum SessionType { case live, online }
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             ZStack {
                 Color.appBackground.ignoresSafeArea()
                 if let type = sessionType {

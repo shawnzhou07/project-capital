@@ -20,55 +20,61 @@ extension Platform {
         (adjustments?.allObjects as? [Adjustment] ?? []).sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
     }
 
+    // Latest conversion rate: platform currency → base currency (e.g. CAD per USD).
+    // From FX deposit: effectiveExchangeRate = platformCurrency/baseCurrency → invert to get baseCurrency/platformCurrency.
+    // From FX withdrawal: effectiveExchangeRate = baseCurrency/platformCurrency → use directly.
+    var latestFXConversionRate: Double {
+        var transactions: [(date: Date, rateToBase: Double)] = []
+
+        for d in depositsArray where d.isForeignExchange && d.effectiveExchangeRate > 0 {
+            transactions.append((date: d.date ?? .distantPast, rateToBase: 1.0 / d.effectiveExchangeRate))
+        }
+
+        for w in withdrawalsArray where w.isForeignExchange && w.effectiveExchangeRate > 0 {
+            transactions.append((date: w.date ?? .distantPast, rateToBase: w.effectiveExchangeRate))
+        }
+
+        return transactions.sorted { $0.date < $1.date }.last?.rateToBase ?? 1.0
+    }
+
     // Total deposited in base currency
     var totalDeposited: Double {
-        depositsArray.reduce(0) { $0 + $1.amountSent }
+        let rate = latestFXConversionRate
+        return depositsArray.reduce(0) { sum, d in
+            if d.isForeignExchange {
+                return sum + d.amountSent          // Already in base currency
+            } else {
+                return sum + d.amountSent * rate   // Convert platform → base
+            }
+        }
     }
 
     // Total withdrawn in base currency
     var totalWithdrawn: Double {
-        withdrawalsArray.reduce(0) { $0 + $1.amountReceived }
-    }
-
-    // Net result: what you got out + current value - what you put in
-    // Uses the most recent withdrawal rate for current balance valuation if available
-    var netResult: Double {
-        let averageRate = averageDepositRate
-        let currentValueInBase = currentBalance * (latestWithdrawalRate ?? averageRate)
-        return totalWithdrawn + currentValueInBase - totalDeposited
-    }
-
-    var latestWithdrawalRate: Double? {
-        guard let latest = withdrawalsArray.last,
-              latest.amountRequested > 0 else { return nil }
-        return latest.amountReceived / latest.amountRequested
-    }
-
-    var averageDepositRate: Double {
-        let fx = depositsArray.filter { $0.isForeignExchange }
-        guard !fx.isEmpty else { return 1.0 }
-        let totalSent = fx.reduce(0.0) { $0 + $1.amountSent }
-        let totalReceived = fx.reduce(0.0) { $0 + $1.amountReceived }
-        guard totalSent > 0 else { return 1.0 }
-        return totalReceived / totalSent
-    }
-
-    // FIFO cost basis parcels for the platform currency
-    // Returns list of (amount in platform currency, cost basis in base currency)
-    var costBasisParcels: [(amount: Double, costPerUnit: Double)] {
-        var parcels: [(amount: Double, costPerUnit: Double)] = []
-        for deposit in depositsArray {
-            let rate: Double
-            if deposit.isForeignExchange && deposit.effectiveExchangeRate > 0 {
-                rate = deposit.effectiveExchangeRate
-            } else if deposit.amountReceived > 0 {
-                rate = deposit.amountSent / deposit.amountReceived
+        let rate = latestFXConversionRate
+        return withdrawalsArray.reduce(0) { sum, w in
+            if w.isForeignExchange {
+                return sum + w.amountReceived          // Already in base currency
             } else {
-                rate = 1.0
+                return sum + w.amountReceived * rate   // Convert platform → base
             }
-            parcels.append((amount: deposit.amountReceived, costPerUnit: rate))
         }
-        return parcels
+    }
+
+    // Net result: withdrawals (base) + current balance (base) − deposits (base).
+    // Returns 0 if no deposits or withdrawals have been recorded yet.
+    var netResult: Double {
+        guard !depositsArray.isEmpty || !withdrawalsArray.isEmpty else { return 0 }
+        let rate = latestFXConversionRate
+        let currentValueBase = currentBalance * rate
+        return totalWithdrawn + currentValueBase - totalDeposited
+    }
+
+    // Net result expressed in the platform's own currency (for supplemental display)
+    var netResultInPlatformCurrency: Double {
+        let rate = latestFXConversionRate
+        guard rate > 0 else { return netResult }
+        return netResult / rate
     }
 
     var displayName: String { name ?? "Unknown Platform" }
@@ -127,6 +133,10 @@ extension LiveCash {
     var isActive: Bool {
         endTime == nil && startTime != nil
     }
+
+    // Net result excludes tips — tips are for record-keeping only
+    var netResult: Double { cashOut - buyIn }
+    var netResultBase: Double { netResult * exchangeRateToBase }
 }
 
 // MARK: - Stats Computation
@@ -218,11 +228,12 @@ func computeStats(
     }
 
     for session in filteredLive {
-        result.netResultNoAdj += session.netProfitLossBase
+        // Use tips-excluded net result for accuracy
+        result.netResultNoAdj += session.netResultBase
         result.totalHours += session.computedDuration
         result.totalHands += session.effectiveHands
         result.sessionCount += 1
-        if session.netProfitLoss > 0 { result.winCount += 1 }
+        if session.netResult > 0 { result.winCount += 1 }
     }
 
     if showAdjustments {

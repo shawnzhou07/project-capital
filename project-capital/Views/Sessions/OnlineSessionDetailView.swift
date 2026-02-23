@@ -260,7 +260,7 @@ struct OnlineSessionDetailView: View {
             .listRowBackground(Color.appSurface)
 
             HStack {
-                Text("Net P&L")
+                Text("Net Result")
                     .foregroundColor(.appPrimary)
                 Spacer()
                 VStack(alignment: .trailing, spacing: 2) {

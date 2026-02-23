@@ -30,12 +30,10 @@ struct AddAdjustmentView: View {
         !name.isEmpty && amountDouble != 0
     }
 
-    // Common adjustment names for quick selection
-    let commonNames = ["Rakeback", "Bad Beat Jackpot", "Bonus", "Tournament Entry Fee",
-                       "Bad Beat", "Promo Credit", "Coaching Fee", "Other"]
+    let commonNames = ["Discrepancy Fix", "Coaching Fee", "Transfer Error", "Other"]
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             ZStack {
                 Color.appBackground.ignoresSafeArea()
                 Form {
@@ -64,7 +62,7 @@ struct AddAdjustmentView: View {
 
     var nameSection: some View {
         Section {
-            TextField("Name (e.g. Rakeback)", text: $name)
+            TextField("Name", text: $name)
                 .foregroundColor(.appPrimary)
                 .listRowBackground(Color.appSurface)
 

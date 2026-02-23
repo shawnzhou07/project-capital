@@ -82,37 +82,40 @@ struct PlatformDetailView: View {
 
     var balanceCard: some View {
         VStack(spacing: 16) {
-            HStack {
+            HStack(alignment: .top) {
+                // LEFT — Net Result (primary, larger)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Current Balance")
-                        .font(.caption)
-                        .foregroundColor(.appSecondary)
-                    HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        Text("$")
-                            .font(.title3)
-                            .foregroundColor(.appSecondary)
-                        TextField("0.00", text: $balanceStr, onCommit: saveBalance)
-                            .font(.system(size: 32, weight: .bold))
-                            .foregroundColor(.appPrimary)
-                            .keyboardType(.decimalPad)
-                            .fixedSize()
-                        Text(platform.displayCurrency)
-                            .font(.subheadline)
-                            .foregroundColor(.appSecondary)
-                    }
-                }
-                Spacer()
-                VStack(alignment: .trailing, spacing: 4) {
                     Text("Net Result")
                         .font(.caption)
                         .foregroundColor(.appSecondary)
-                    Text(AppFormatter.currencySigned(platform.netResult))
+                    Text(AppFormatter.currencySigned(platform.netResult) + " \(baseCurrency)")
                         .font(.title3)
-                        .fontWeight(.semibold)
+                        .fontWeight(.bold)
                         .foregroundColor(platform.netResult.profitColor)
-                    Text(baseCurrency)
-                        .font(.caption2)
+                    if platform.displayCurrency != baseCurrency {
+                        Text(AppFormatter.currencySigned(platform.netResultInPlatformCurrency) + " \(platform.displayCurrency)")
+                            .font(.caption)
+                            .foregroundColor(platform.netResultInPlatformCurrency.profitColor)
+                    }
+                }
+                Spacer()
+                // RIGHT — Current Balance (secondary, smaller)
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text("Current Balance")
+                        .font(.caption)
                         .foregroundColor(.appSecondary)
+                    HStack(alignment: .firstTextBaseline, spacing: 2) {
+                        TextField("0.00", text: $balanceStr, onCommit: saveBalance)
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.appPrimary)
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .fixedSize()
+                        Text(platform.displayCurrency)
+                            .font(.caption)
+                            .foregroundColor(.appSecondary)
+                    }
                 }
             }
 

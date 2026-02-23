@@ -42,7 +42,7 @@ struct FloatingSessionBar: View {
             } label: {
                 HStack(spacing: 10) {
                     Circle()
-                        .fill(Color.appGold)
+                        .fill(Color.appProfit)
                         .frame(width: 10, height: 10)
 
                     Text(info.type)
@@ -67,12 +67,13 @@ struct FloatingSessionBar: View {
                 }
                 .padding(.horizontal, 16)
                 .frame(height: 56)
-                .background(Color.appBackground)
-                .overlay(alignment: .top) {
-                    Color(hex: "2A2A2A").frame(height: 1)
-                }
+                .background(Color.appSurface)
+                .cornerRadius(16)
+                .shadow(color: .black.opacity(0.4), radius: 8, x: 0, y: -2)
             }
             .buttonStyle(.plain)
+            .padding(.horizontal, 12)
+            .padding(.bottom, 8)
             .onReceive(timer) { _ in tick = Date() }
         }
     }

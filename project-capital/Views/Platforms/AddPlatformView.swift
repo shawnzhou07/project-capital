@@ -19,7 +19,7 @@ struct AddPlatformView: View {
     }
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             ZStack {
                 Color.appBackground.ignoresSafeArea()
                 VStack(spacing: 0) {

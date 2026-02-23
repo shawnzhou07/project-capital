@@ -107,46 +107,44 @@ struct SessionsListView: View {
     }
 
     var body: some View {
-        NavigationView {
-            ZStack {
-                Color.appBackground.ignoresSafeArea()
-                VStack(spacing: 0) {
-                    filterBar
-                    sessionList
-                }
+        ZStack {
+            Color.appBackground.ignoresSafeArea()
+            VStack(spacing: 0) {
+                filterBar
+                sessionList
             }
-            .navigationTitle("Sessions")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Menu {
-                        Button {
-                            handleAddTap()
-                        } label: {
-                            Label("Cash Game", systemImage: "suit.spade.fill")
-                        }
+        }
+        .navigationTitle("Sessions")
+        .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Menu {
+                    Button {
+                        handleAddTap()
                     } label: {
-                        Image(systemName: "plus")
-                            .foregroundColor(.appGold)
+                        Label("Cash Game", systemImage: "suit.spade.fill")
                     }
+                } label: {
+                    Image(systemName: "plus")
+                        .foregroundColor(.appGold)
                 }
             }
-            .alert("Active Session", isPresented: $showActiveSessionAlert) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text("You have an active session in progress. Please complete or discard it before starting a new one.")
+        }
+        .alert("Active Session", isPresented: $showActiveSessionAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("You have an active session in progress. Please complete or discard it before starting a new one.")
+        }
+        .alert("Delete Session?", isPresented: $showDeleteAlert) {
+            Button("Delete", role: .destructive) {
+                performDelete()
             }
-            .alert("Delete Session?", isPresented: $showDeleteAlert) {
-                Button("Delete", role: .destructive) {
-                    performDelete()
-                }
-                Button("Cancel", role: .cancel) {
-                    deleteOnlineSession = nil
-                    deleteLiveSession = nil
-                }
-            } message: {
-                Text("This cannot be undone.")
+            Button("Cancel", role: .cancel) {
+                deleteOnlineSession = nil
+                deleteLiveSession = nil
             }
+        } message: {
+            Text("This cannot be undone.")
         }
     }
 

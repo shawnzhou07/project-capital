@@ -20,9 +20,9 @@ struct OnlineSessionEntryView: View {
     @State private var entryState: EntryState = .preStart
     @State private var coreDataSession: OnlineCash? = nil
 
-    // Timing
-    @State private var sessionStartTime: Date? = nil
-    @State private var sessionEndTime: Date? = nil
+    // Timing state vars (always editable)
+    @State private var startTime = Date()
+    @State private var endTime = Date()
 
     // Form fields
     @State private var selectedPlatform: Platform? = nil
@@ -37,37 +37,41 @@ struct OnlineSessionEntryView: View {
     @State private var notes = ""
 
     @State private var showDiscardAlert = false
+    @State private var showRequiredFieldsAlert = false
     @State private var showPlatformPicker = false
     @State private var tick = Date()
     let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
+    // Balance discrepancy
+    @FocusState private var balanceBeforeFocused: Bool
+    @State private var showBalanceDiscrepancy = false
+    @State private var discrepancyEnteredBalance: Double = 0
+    @State private var discrepancyRecordedBalance: Double = 0
+    @State private var showDepositForDiscrepancy = false
+
     // MARK: - Computed
 
-    var platformCurrency: String {
-        selectedPlatform?.displayCurrency ?? "USD"
-    }
+    var platformCurrency: String { selectedPlatform?.displayCurrency ?? "USD" }
+    var isSameCurrency: Bool { platformCurrency == baseCurrency }
 
-    var isSameCurrency: Bool {
-        platformCurrency == baseCurrency
-    }
-
-    var netPL: Double {
+    var netResult: Double {
         (Double(balanceAfter) ?? 0) - (Double(balanceBefore) ?? 0)
     }
 
-    var netPLBase: Double {
-        netPL * (Double(exchangeRate) ?? 1.0)
+    var netResultBase: Double {
+        netResult * (Double(exchangeRate) ?? 1.0)
     }
 
     var sessionDurationHours: Double {
-        guard let start = sessionStartTime else { return 0 }
-        let end = sessionEndTime ?? tick
-        return max(0, end.timeIntervalSince(start) / 3600.0)
+        switch entryState {
+        case .preStart: return 0
+        case .active: return max(0, tick.timeIntervalSince(startTime) / 3600.0)
+        case .stopped: return max(0, endTime.timeIntervalSince(startTime) / 3600.0)
+        }
     }
 
     var estimatedHands: Int {
-        let settings = UserSettings.shared
-        return Int(sessionDurationHours * Double(settings.handsPerHourOnline) * Double(tables))
+        Int(sessionDurationHours * Double(UserSettings.shared.handsPerHourOnline) * Double(tables))
     }
 
     var elapsedText: String {
@@ -77,9 +81,7 @@ struct OnlineSessionEntryView: View {
         return "\(h)h \(m)m"
     }
 
-    var isValid: Bool {
-        selectedPlatform != nil && !blinds.isEmpty
-    }
+    var isValidForSave: Bool { selectedPlatform != nil && !blinds.isEmpty }
 
     var hasData: Bool {
         selectedPlatform != nil || !blinds.isEmpty || !balanceBefore.isEmpty || !balanceAfter.isEmpty || !notes.isEmpty
@@ -91,13 +93,10 @@ struct OnlineSessionEntryView: View {
         Form {
             platformSection
             sessionDetailsSection
-            timingStatusSection
+            timingSection
             balanceSection
             handsSection
             notesSection
-            if entryState == .stopped {
-                saveSection
-            }
         }
         .scrollContentBackground(.hidden)
         .background(Color.appBackground)
@@ -106,27 +105,7 @@ struct OnlineSessionEntryView: View {
         .navigationBarBackButtonHidden(true)
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
-                if entryState == .active {
-                    Button {
-                        coordinator.dismissForm()
-                    } label: {
-                        Image(systemName: "chevron.left")
-                            .foregroundColor(.appGold)
-                    }
-                } else {
-                    Button {
-                        if entryState == .preStart && hasData {
-                            showDiscardAlert = true
-                        } else if entryState == .stopped {
-                            showDiscardAlert = true
-                        } else {
-                            coordinator.dismissForm()
-                        }
-                    } label: {
-                        Image(systemName: "xmark")
-                            .foregroundColor(.appSecondary)
-                    }
-                }
+                leadingButton
             }
             if entryState == .preStart {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -143,12 +122,32 @@ struct OnlineSessionEntryView: View {
             }
         }
         .alert("Discard session?", isPresented: $showDiscardAlert) {
-            Button("Discard", role: .destructive) {
-                discardSession()
-            }
+            Button("Discard", role: .destructive) { discardSession() }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("All entered data will be lost.")
+        }
+        .alert("Required Fields Missing", isPresented: $showRequiredFieldsAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Please fill in all required fields before saving your session.")
+        }
+        .confirmationDialog(
+            "Balance Discrepancy Detected",
+            isPresented: $showBalanceDiscrepancy,
+            titleVisibility: .visible
+        ) {
+            Button("Add Deposit") { showDepositForDiscrepancy = true }
+            Button("Log as Adjustment") { logDiscrepancyAsAdjustment() }
+            Button("Ignore", role: .cancel) {}
+        } message: {
+            Text("Your entered balance (\(AppFormatter.currency(discrepancyEnteredBalance, code: platformCurrency))) does not match the recorded platform balance (\(AppFormatter.currency(discrepancyRecordedBalance, code: platformCurrency))). How would you like to resolve this?")
+        }
+        .sheet(isPresented: $showDepositForDiscrepancy) {
+            if let platform = selectedPlatform {
+                DepositFormView(platform: platform)
+                    .environment(\.managedObjectContext, viewContext)
+            }
         }
         .onAppear {
             if let session = existingSession {
@@ -159,8 +158,28 @@ struct OnlineSessionEntryView: View {
             }
         }
         .onReceive(timer) { t in
-            if entryState == .active {
-                tick = t
+            if entryState == .active { tick = t }
+        }
+    }
+
+    @ViewBuilder
+    private var leadingButton: some View {
+        switch entryState {
+        case .preStart:
+            Button {
+                if hasData { showDiscardAlert = true } else { coordinator.dismissForm() }
+            } label: {
+                Image(systemName: "xmark").foregroundColor(.appSecondary)
+            }
+        case .active:
+            Button { coordinator.dismissForm() } label: {
+                Image(systemName: "chevron.left").foregroundColor(.appGold)
+            }
+        case .stopped:
+            Button {
+                if isValidForSave { saveFinal() } else { showRequiredFieldsAlert = true }
+            } label: {
+                Image(systemName: "chevron.left").foregroundColor(.appGold)
             }
         }
     }
@@ -173,28 +192,22 @@ struct OnlineSessionEntryView: View {
                 showPlatformPicker = true
             } label: {
                 HStack {
-                    Text("Platform")
-                        .foregroundColor(.appPrimary)
+                    Text("Platform").foregroundColor(.appPrimary)
                     Spacer()
                     Text(selectedPlatform?.displayName ?? "Select...")
                         .foregroundColor(selectedPlatform == nil ? .appSecondary : .appGold)
                     if selectedPlatform != nil {
-                        Text("·")
-                            .foregroundColor(.appSecondary)
-                        Text(platformCurrency)
-                            .foregroundColor(.appSecondary)
+                        Text("·").foregroundColor(.appSecondary)
+                        Text(platformCurrency).foregroundColor(.appSecondary)
                     }
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundColor(.appSecondary)
+                    Image(systemName: "chevron.right").font(.caption).foregroundColor(.appSecondary)
                 }
             }
             .listRowBackground(Color.appSurface)
 
             if !isSameCurrency {
                 HStack {
-                    Text("Exchange Rate")
-                        .foregroundColor(.appPrimary)
+                    Text("Exchange Rate").foregroundColor(.appPrimary)
                     Spacer()
                     TextField("1.0000", text: $exchangeRate)
                         .keyboardType(.decimalPad)
@@ -202,9 +215,7 @@ struct OnlineSessionEntryView: View {
                         .foregroundColor(.appGold)
                         .frame(width: 100)
                         .onChange(of: exchangeRate) { _, _ in autoSaveIfActive() }
-                    Text("\(platformCurrency)/\(baseCurrency)")
-                        .font(.caption)
-                        .foregroundColor(.appSecondary)
+                    Text("\(platformCurrency)/\(baseCurrency)").font(.caption).foregroundColor(.appSecondary)
                 }
                 .listRowBackground(Color.appSurface)
             }
@@ -230,8 +241,7 @@ struct OnlineSessionEntryView: View {
             .onChange(of: gameType) { _, _ in autoSaveIfActive() }
 
             HStack {
-                Text("Blinds")
-                    .foregroundColor(.appPrimary)
+                Text("Blinds").foregroundColor(.appPrimary)
                 Spacer()
                 TextField("1/2", text: $blinds)
                     .multilineTextAlignment(.trailing)
@@ -254,72 +264,59 @@ struct OnlineSessionEntryView: View {
         }
     }
 
-    @ViewBuilder
-    var timingStatusSection: some View {
-        switch entryState {
-        case .preStart:
-            EmptyView()
-        case .active:
-            Section {
-                HStack {
-                    HStack(spacing: 8) {
-                        Circle()
-                            .fill(Color.appGold)
-                            .frame(width: 8, height: 8)
-                        Text("Session Active")
-                            .foregroundColor(.appPrimary)
+    var timingSection: some View {
+        Section {
+            DatePicker("Start Time", selection: $startTime)
+                .foregroundColor(.appPrimary).tint(.appGold)
+                .listRowBackground(Color.appSurface)
+                .onChange(of: startTime) { _, _ in autoSaveIfActive() }
+
+            DatePicker("End Time", selection: $endTime)
+                .foregroundColor(.appPrimary).tint(.appGold)
+                .listRowBackground(Color.appSurface)
+                .disabled(entryState != .stopped)
+                .opacity(entryState == .stopped ? 1.0 : 0.4)
+
+            HStack {
+                Text("Duration").foregroundColor(.appPrimary)
+                Spacer()
+                if entryState == .active {
+                    HStack(spacing: 6) {
+                        Circle().fill(Color.appGold).frame(width: 6, height: 6)
+                        Text(elapsedText).foregroundColor(.appGold).fontWeight(.medium).monospacedDigit()
                     }
-                    Spacer()
-                    Text(elapsedText)
-                        .foregroundColor(.appGold)
-                        .fontWeight(.medium)
-                        .monospacedDigit()
+                } else if entryState == .stopped {
+                    Text(AppFormatter.duration(sessionDurationHours)).foregroundColor(.appSecondary)
+                } else {
+                    Text("—").foregroundColor(.appSecondary)
                 }
-                .listRowBackground(Color.appSurface)
-            } header: {
-                Text("Timing").foregroundColor(.appGold).textCase(nil)
             }
-        case .stopped:
-            Section {
-                HStack {
-                    Text("Duration")
-                        .foregroundColor(.appPrimary)
-                    Spacer()
-                    Text(AppFormatter.duration(sessionDurationHours))
-                        .foregroundColor(.appSecondary)
-                }
-                .listRowBackground(Color.appSurface)
-            } header: {
-                Text("Timing").foregroundColor(.appGold).textCase(nil)
-            }
+            .listRowBackground(Color.appSurface)
+        } header: {
+            Text("Timing").foregroundColor(.appGold).textCase(nil)
         }
     }
 
     var balanceSection: some View {
         Section {
             HStack {
-                Text("Balance Before")
-                    .foregroundColor(.appPrimary)
+                Text("Balance Before").foregroundColor(.appPrimary)
                 Spacer()
-                Text(platformCurrency)
-                    .font(.caption)
-                    .foregroundColor(.appSecondary)
+                Text(platformCurrency).font(.caption).foregroundColor(.appSecondary)
                 TextField("0.00", text: $balanceBefore)
                     .keyboardType(.decimalPad)
                     .multilineTextAlignment(.trailing)
                     .foregroundColor(.appPrimary)
                     .frame(width: 100)
+                    .focused($balanceBeforeFocused)
                     .onChange(of: balanceBefore) { _, _ in autoSaveIfActive() }
             }
             .listRowBackground(Color.appSurface)
 
             HStack {
-                Text("Balance After")
-                    .foregroundColor(.appPrimary)
+                Text("Balance After").foregroundColor(.appPrimary)
                 Spacer()
-                Text(platformCurrency)
-                    .font(.caption)
-                    .foregroundColor(.appSecondary)
+                Text(platformCurrency).font(.caption).foregroundColor(.appSecondary)
                 TextField("0.00", text: $balanceAfter)
                     .keyboardType(.decimalPad)
                     .multilineTextAlignment(.trailing)
@@ -330,17 +327,14 @@ struct OnlineSessionEntryView: View {
             .listRowBackground(Color.appSurface)
 
             HStack {
-                Text("Net P&L")
-                    .foregroundColor(.appPrimary)
+                Text("Net Result").foregroundColor(.appPrimary)
                 Spacer()
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text(AppFormatter.currencySigned(netPL, code: platformCurrency))
-                        .fontWeight(.semibold)
-                        .foregroundColor(netPL.profitColor)
+                    Text(AppFormatter.currencySigned(netResult, code: platformCurrency))
+                        .fontWeight(.semibold).foregroundColor(netResult.profitColor)
                     if !isSameCurrency {
-                        Text(AppFormatter.currencySigned(netPLBase, code: baseCurrency))
-                            .font(.caption)
-                            .foregroundColor(netPLBase.profitColor)
+                        Text(AppFormatter.currencySigned(netResultBase, code: baseCurrency))
+                            .font(.caption).foregroundColor(netResultBase.profitColor)
                     }
                 }
             }
@@ -348,13 +342,15 @@ struct OnlineSessionEntryView: View {
         } header: {
             Text("Balance").foregroundColor(.appGold).textCase(nil)
         }
+        .onChange(of: balanceBeforeFocused) { _, isFocused in
+            if !isFocused { checkBalanceDiscrepancy() }
+        }
     }
 
     var handsSection: some View {
         Section {
             HStack {
-                Text("Hands Played")
-                    .foregroundColor(.appPrimary)
+                Text("Hands Played").foregroundColor(.appPrimary)
                 Spacer()
                 TextField("Auto (\(estimatedHands) est.)", text: $handsOverride)
                     .keyboardType(.numberPad)
@@ -383,26 +379,11 @@ struct OnlineSessionEntryView: View {
         }
     }
 
-    var saveSection: some View {
-        Section {
-            Button {
-                saveFinal()
-            } label: {
-                Text("Save Session")
-                    .font(.headline)
-                    .foregroundColor(isValid ? .black : .appSecondary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 4)
-            }
-            .disabled(!isValid)
-            .listRowBackground(isValid ? Color.appGold : Color.appSurface2)
-        }
-    }
-
     // MARK: - Actions
 
     func handleStart() {
         guard let platform = selectedPlatform else { return }
+        startTime = Date()
         let session = OnlineCash(context: viewContext)
         session.id = UUID()
         session.platform = platform
@@ -414,30 +395,24 @@ struct OnlineSessionEntryView: View {
         session.balanceAfter = Double(balanceAfter) ?? 0
         session.exchangeRateToBase = Double(exchangeRate) ?? 1.0
         session.notes = notes.isEmpty ? nil : notes
-        session.startTime = Date()
+        session.startTime = startTime
 
         do {
             try viewContext.save()
             coreDataSession = session
-            sessionStartTime = session.startTime
             entryState = .active
-        } catch {
-            print("Start error: \(error)")
-        }
+        } catch { print("Start error: \(error)") }
     }
 
     func handleStop() {
         guard let session = coreDataSession else { return }
-        let end = Date()
-        session.endTime = end
-        session.duration = max(0, end.timeIntervalSince(session.startTime ?? end) / 3600.0)
+        endTime = Date()
+        session.endTime = endTime
+        session.duration = max(0, endTime.timeIntervalSince(startTime) / 3600.0)
         do {
             try viewContext.save()
-            sessionEndTime = end
             entryState = .stopped
-        } catch {
-            print("Stop error: \(error)")
-        }
+        } catch { print("Stop error: \(error)") }
     }
 
     func saveFinal() {
@@ -447,24 +422,22 @@ struct OnlineSessionEntryView: View {
         session.blinds = blinds
         session.tableSize = Int16(tableSize)
         session.tables = Int16(tables)
+        session.startTime = startTime
+        session.endTime = endTime
+        session.duration = sessionDurationHours
         session.balanceBefore = Double(balanceBefore) ?? 0
         session.balanceAfter = Double(balanceAfter) ?? 0
-        session.netProfitLoss = netPL
+        session.netProfitLoss = netResult
         session.exchangeRateToBase = Double(exchangeRate) ?? 1.0
-        session.netProfitLossBase = netPLBase
+        session.netProfitLossBase = netResultBase
         session.handsCount = Int32(handsOverride) ?? 0
         session.notes = notes.isEmpty ? nil : notes
-        session.duration = sessionDurationHours
-
-        // Update platform balance
         platform.currentBalance = Double(balanceAfter) ?? platform.currentBalance
 
         do {
             try viewContext.save()
             coordinator.dismissForm()
-        } catch {
-            print("Save error: \(error)")
-        }
+        } catch { print("Save error: \(error)") }
     }
 
     func discardSession() {
@@ -491,9 +464,35 @@ struct OnlineSessionEntryView: View {
 
     func syncExchangeRate() {
         guard let platform = selectedPlatform else { return }
-        if platform.displayCurrency == baseCurrency {
-            exchangeRate = "1.0000"
+        if platform.displayCurrency == baseCurrency { exchangeRate = "1.0000" }
+    }
+
+    func checkBalanceDiscrepancy() {
+        guard let platform = selectedPlatform else { return }
+        let entered = Double(balanceBefore) ?? 0
+        let recorded = platform.currentBalance
+        if abs(entered - recorded) > 0.01 {
+            discrepancyEnteredBalance = entered
+            discrepancyRecordedBalance = recorded
+            showBalanceDiscrepancy = true
         }
+    }
+
+    func logDiscrepancyAsAdjustment() {
+        guard let platform = selectedPlatform else { return }
+        let diff = discrepancyEnteredBalance - discrepancyRecordedBalance
+        let adjustment = Adjustment(context: viewContext)
+        adjustment.id = UUID()
+        adjustment.name = "Discrepancy Fix"
+        adjustment.amount = diff
+        adjustment.date = Date()
+        adjustment.currency = platform.displayCurrency
+        adjustment.exchangeRateToBase = Double(exchangeRate) ?? 1.0
+        adjustment.amountBase = diff * (Double(exchangeRate) ?? 1.0)
+        adjustment.isOnline = true
+        adjustment.platform = platform
+        platform.currentBalance = discrepancyEnteredBalance
+        try? viewContext.save()
     }
 
     func loadFromExisting(_ session: OnlineCash) {
@@ -508,7 +507,7 @@ struct OnlineSessionEntryView: View {
         exchangeRate = AppFormatter.exchangeRate(session.exchangeRateToBase)
         handsOverride = session.handsCount > 0 ? String(session.handsCount) : ""
         notes = session.notes ?? ""
-        sessionStartTime = session.startTime
+        startTime = session.startTime ?? Date()
         entryState = .active
     }
 }

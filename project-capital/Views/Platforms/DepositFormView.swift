@@ -9,31 +9,43 @@ struct DepositFormView: View {
 
     @State private var amountSent = ""
     @State private var amountReceived = ""
+    @State private var effectiveRateStr = ""
     @State private var date = Date()
     @State private var isForeignExchange = true
     @State private var method = "E-Transfer"
-    @State private var notes = ""
 
-    var effectiveRate: Double {
-        let sent = Double(amountSent) ?? 0
-        let received = Double(amountReceived) ?? 0
-        guard sent > 0, received > 0 else { return 0 }
-        return sent / received
-    }
-
-    var processingFee: Double {
-        let sent = Double(amountSent) ?? 0
-        let received = Double(amountReceived) ?? 0
-        return sent - received
-    }
+    @State private var showNegativeFeeWarning = false
 
     var isSameCurrency: Bool { platform.displayCurrency == baseCurrency }
+
+    // FX ON: effectiveRate = amountReceived(platform) / amountSent(base) — platform per base unit
+    var computedEffectiveRate: Double {
+        let s = Double(amountSent) ?? 0
+        let r = Double(amountReceived) ?? 0
+        guard s > 0, r > 0 else { return 0 }
+        return r / s
+    }
+
+    // Processing fee (positive = loss, only for non-FX transactions)
+    var processingFee: Double {
+        (Double(amountSent) ?? 0) - (Double(amountReceived) ?? 0)
+    }
+
     var isValid: Bool {
         (Double(amountSent) ?? 0) > 0 && (Double(amountReceived) ?? 0) > 0
     }
 
+    var sentLabel: String {
+        if isSameCurrency { return "Amount Sent (\(baseCurrency))" }
+        return isForeignExchange ? "Amount Sent (\(baseCurrency))" : "Amount Sent (\(platform.displayCurrency))"
+    }
+
+    var receivedLabel: String {
+        isForeignExchange ? "Amount Received (\(platform.displayCurrency))" : "Amount Received (\(platform.displayCurrency))"
+    }
+
     var body: some View {
-        NavigationView {
+        NavigationStack {
             ZStack {
                 Color.appBackground.ignoresSafeArea()
                 Form {
@@ -48,38 +60,43 @@ struct DepositFormView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                        .foregroundColor(.appSecondary)
+                    Button("Cancel") { dismiss() }.foregroundColor(.appSecondary)
                 }
             }
+        }
+        .alert("Negative Processing Fee", isPresented: $showNegativeFeeWarning) {
+            Button("Save Anyway") { performSave() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("A negative processing fee means you gained money on this transaction. Please verify this is correct.")
         }
     }
 
     var amountsSection: some View {
         Section {
+            // Amount Sent
             HStack {
-                Text("Amount Sent")
-                    .foregroundColor(.appPrimary)
+                Text(sentLabel).foregroundColor(.appPrimary)
                 Spacer()
-                Text(baseCurrency).font(.caption).foregroundColor(.appSecondary)
                 TextField("0.00", text: $amountSent)
                     .keyboardType(.decimalPad)
                     .multilineTextAlignment(.trailing)
                     .foregroundColor(.appPrimary)
-                    .frame(width: 100)
+                    .frame(width: 120)
+                    .onChange(of: amountSent) { _, _ in recalcRate() }
             }
             .listRowBackground(Color.appSurface)
 
+            // Amount Received
             HStack {
-                Text("Amount Received")
-                    .foregroundColor(.appPrimary)
+                Text(receivedLabel).foregroundColor(.appPrimary)
                 Spacer()
-                Text(platform.displayCurrency).font(.caption).foregroundColor(.appSecondary)
                 TextField("0.00", text: $amountReceived)
                     .keyboardType(.decimalPad)
                     .multilineTextAlignment(.trailing)
                     .foregroundColor(.appPrimary)
-                    .frame(width: 100)
+                    .frame(width: 120)
+                    .onChange(of: amountReceived) { _, _ in recalcRate() }
             }
             .listRowBackground(Color.appSurface)
 
@@ -90,28 +107,38 @@ struct DepositFormView: View {
                 .tint(.appGold)
                 .listRowBackground(Color.appSurface)
 
-                if isForeignExchange && effectiveRate > 0 {
+                if isForeignExchange {
+                    // Effective Rate (auto-calc, editable)
                     HStack {
-                        Text("Effective Rate")
-                            .foregroundColor(.appSecondary)
+                        Text("Effective Rate").foregroundColor(.appSecondary)
                         Spacer()
-                        Text(AppFormatter.exchangeRate(effectiveRate))
+                        TextField("0.0000", text: $effectiveRateStr)
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
                             .foregroundColor(.appGold)
-                        Text("\(baseCurrency)/\(platform.displayCurrency)")
-                            .font(.caption)
-                            .foregroundColor(.appSecondary)
+                            .frame(width: 90)
+                        Text("\(platform.displayCurrency)/\(baseCurrency)")
+                            .font(.caption).foregroundColor(.appSecondary)
                     }
                     .listRowBackground(Color.appSurface)
-                } else if !isForeignExchange && processingFee != 0 {
+                } else {
+                    // Processing Fee (positive = loss; warn if negative)
                     HStack {
-                        Text("Processing Fee")
+                        Text("Processing Fee (\(platform.displayCurrency))")
                             .foregroundColor(.appSecondary)
                         Spacer()
-                        Text(AppFormatter.currency(processingFee, code: baseCurrency))
+                        Text(String(format: "%.2f", max(0, processingFee)))
                             .foregroundColor(.appNeutral)
                     }
                     .listRowBackground(Color.appSurface)
                 }
+            } else if processingFee != 0 {
+                HStack {
+                    Text("Processing Fee (\(baseCurrency))").foregroundColor(.appSecondary)
+                    Spacer()
+                    Text(String(format: "%.2f", abs(processingFee))).foregroundColor(.appNeutral)
+                }
+                .listRowBackground(Color.appSurface)
             }
         } header: {
             Text("Amounts").foregroundColor(.appGold).textCase(nil)
@@ -121,15 +148,13 @@ struct DepositFormView: View {
     var detailsSection: some View {
         Section {
             DatePicker("Date", selection: $date, displayedComponents: .date)
-                .foregroundColor(.appPrimary)
-                .tint(.appGold)
+                .foregroundColor(.appPrimary).tint(.appGold)
                 .listRowBackground(Color.appSurface)
 
             Picker("Method", selection: $method) {
                 ForEach(depositMethods, id: \.self) { Text($0) }
             }
-            .foregroundColor(.appPrimary)
-            .tint(.appGold)
+            .foregroundColor(.appPrimary).tint(.appGold)
             .listRowBackground(Color.appSurface)
         } header: {
             Text("Details").foregroundColor(.appGold).textCase(nil)
@@ -139,32 +164,52 @@ struct DepositFormView: View {
     var saveSection: some View {
         Section {
             Button {
-                saveDeposit()
+                if !isSameCurrency && !isForeignExchange && processingFee < 0 {
+                    showNegativeFeeWarning = true
+                } else {
+                    performSave()
+                }
             } label: {
                 Text("Save Deposit")
                     .font(.headline)
                     .foregroundColor(isValid ? .black : .appSecondary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 4)
+                    .frame(maxWidth: .infinity).padding(.vertical, 4)
             }
             .disabled(!isValid)
             .listRowBackground(isValid ? Color.appGold : Color.appSurface2)
         }
     }
 
-    func saveDeposit() {
+    func recalcRate() {
+        let s = Double(amountSent) ?? 0
+        let r = Double(amountReceived) ?? 0
+        if s > 0, r > 0 { effectiveRateStr = String(format: "%.4f", r / s) }
+    }
+
+    func performSave() {
         let deposit = Deposit(context: viewContext)
         deposit.id = UUID()
         deposit.date = date
         deposit.amountSent = Double(amountSent) ?? 0
         deposit.amountReceived = Double(amountReceived) ?? 0
-        deposit.isForeignExchange = isForeignExchange
-        deposit.effectiveExchangeRate = isForeignExchange ? effectiveRate : 0
-        deposit.processingFee = isForeignExchange ? 0 : processingFee
         deposit.method = method
         deposit.platform = platform
 
-        // Update platform balance
+        if isSameCurrency {
+            deposit.isForeignExchange = false
+            deposit.effectiveExchangeRate = 0
+            deposit.processingFee = processingFee
+        } else if isForeignExchange {
+            deposit.isForeignExchange = true
+            deposit.effectiveExchangeRate = Double(effectiveRateStr) ?? computedEffectiveRate
+            deposit.processingFee = 0
+        } else {
+            deposit.isForeignExchange = false
+            deposit.effectiveExchangeRate = 0
+            deposit.processingFee = processingFee
+        }
+
+        // Platform balance increases by amount received (always in platform currency)
         platform.currentBalance += deposit.amountReceived
 
         do {

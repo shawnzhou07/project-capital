@@ -4,7 +4,6 @@ import CoreData
 struct StatsView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @AppStorage("baseCurrency") private var baseCurrency = "CAD"
-    @AppStorage("showAdjustmentsInStats") private var showAdjustments = true
 
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \OnlineCash.startTime, ascending: false)])
     private var onlineSessions: FetchedResults<OnlineCash>
@@ -20,7 +19,7 @@ struct StatsView: View {
 
     @State private var dateFilter: DateFilter = .allTime
     @State private var sessionFilter: SessionFilter = .all
-    @State private var showAdjustmentToggle = true
+    @State private var includeAdjustments = true
 
     var stats: StatsResult {
         computeStats(
@@ -29,28 +28,26 @@ struct StatsView: View {
             adjustments: Array(adjustments),
             dateFilter: dateFilter,
             sessionFilter: sessionFilter,
-            showAdjustments: showAdjustments && showAdjustmentToggle
+            showAdjustments: includeAdjustments
         )
     }
 
     var body: some View {
-        NavigationView {
-            ZStack {
-                Color.appBackground.ignoresSafeArea()
-                ScrollView {
-                    VStack(spacing: 16) {
-                        netResultHeader
-                        dateFilterBar
-                        sessionFilterBar
-                        statsGrid
-                        platformBreakdown
-                    }
-                    .padding()
+        ZStack {
+            Color.appBackground.ignoresSafeArea()
+            ScrollView {
+                VStack(spacing: 16) {
+                    netResultHeader
+                    dateFilterBar
+                    sessionFilterBar
+                    statsGrid
+                    platformBreakdown
                 }
+                .padding()
             }
-            .navigationTitle("Statistics")
-            .navigationBarTitleDisplayMode(.large)
         }
+        .navigationTitle("Statistics")
+        .navigationBarTitleDisplayMode(.large)
     }
 
     // MARK: - Net Result Header
@@ -59,23 +56,19 @@ struct StatsView: View {
         VStack(spacing: 12) {
             VStack(spacing: 4) {
                 Text(baseCurrency)
-                    .font(.caption)
-                    .foregroundColor(.appSecondary)
+                    .font(.caption).foregroundColor(.appSecondary)
                 Text(AppFormatter.currencySigned(stats.netResult))
                     .font(.system(size: 44, weight: .bold))
                     .foregroundColor(stats.netResult.profitColor)
                     .minimumScaleFactor(0.5)
             }
 
-            if showAdjustments {
-                Toggle(isOn: $showAdjustmentToggle) {
-                    Text("Include Adjustments")
-                        .font(.caption)
-                        .foregroundColor(.appSecondary)
-                }
-                .tint(.appGold)
-                .padding(.horizontal, 4)
+            Toggle(isOn: $includeAdjustments) {
+                Text("Include Adjustments")
+                    .font(.caption).foregroundColor(.appSecondary)
             }
+            .tint(.appGold)
+            .padding(.horizontal, 4)
         }
         .padding()
         .frame(maxWidth: .infinity)
@@ -88,15 +81,9 @@ struct StatsView: View {
     var dateFilterBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                DateFilterChip(label: "All Time", isSelected: isDateFilter(.allTime)) {
-                    dateFilter = .allTime
-                }
-                DateFilterChip(label: "This Month", isSelected: isDateFilter(.thisMonth)) {
-                    dateFilter = .thisMonth
-                }
-                DateFilterChip(label: "This Year", isSelected: isDateFilter(.thisYear)) {
-                    dateFilter = .thisYear
-                }
+                DateFilterChip(label: "All Time", isSelected: isDateFilter(.allTime)) { dateFilter = .allTime }
+                DateFilterChip(label: "This Month", isSelected: isDateFilter(.thisMonth)) { dateFilter = .thisMonth }
+                DateFilterChip(label: "This Year", isSelected: isDateFilter(.thisYear)) { dateFilter = .thisYear }
             }
         }
     }
@@ -144,7 +131,7 @@ struct StatsView: View {
                 title: "Hourly Rate",
                 value: AppFormatter.hourlyRate(stats.hourlyRate),
                 icon: "clock.fill",
-                color: stats.hourlyRate.profitColor
+                color: stats.sessionCount == 0 ? .appSecondary : stats.hourlyRate.profitColor
             )
             StatCard(
                 title: "Sessions",
@@ -168,13 +155,13 @@ struct StatsView: View {
                 title: "Avg Session",
                 value: AppFormatter.currencySigned(stats.avgResult),
                 icon: "chart.line.uptrend.xyaxis",
-                color: stats.avgResult.profitColor
+                color: stats.sessionCount == 0 ? .appSecondary : stats.avgResult.profitColor
             )
             StatCard(
                 title: "Win Rate",
                 value: AppFormatter.percentage(stats.winRate),
                 icon: "trophy.fill",
-                color: stats.winRate > 0.5 ? .appProfit : .appLoss
+                color: stats.sessionCount == 0 ? .appSecondary : (stats.winRate > 0.5 ? .appProfit : .appLoss)
             )
         }
     }
@@ -184,17 +171,13 @@ struct StatsView: View {
     var platformBreakdown: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Platform Breakdown")
-                .font(.headline)
-                .foregroundColor(.appGold)
+                .font(.headline).foregroundColor(.appGold)
 
             if platforms.isEmpty {
                 Text("No platforms added yet.")
-                    .font(.subheadline)
-                    .foregroundColor(.appSecondary)
-                    .padding()
-                    .frame(maxWidth: .infinity)
-                    .background(Color.appSurface)
-                    .cornerRadius(8)
+                    .font(.subheadline).foregroundColor(.appSecondary)
+                    .padding().frame(maxWidth: .infinity)
+                    .background(Color.appSurface).cornerRadius(8)
             } else {
                 ForEach(Array(platforms)) { platform in
                     PlatformBreakdownRow(platform: platform, baseCurrency: baseCurrency)
@@ -215,20 +198,14 @@ struct StatCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Image(systemName: icon)
-                    .foregroundColor(color)
-                    .font(.caption)
+                Image(systemName: icon).foregroundColor(color).font(.caption)
                 Spacer()
             }
             Text(value)
-                .font(.title3)
-                .fontWeight(.bold)
-                .foregroundColor(color)
-                .minimumScaleFactor(0.6)
-                .lineLimit(1)
+                .font(.title3).fontWeight(.bold).foregroundColor(color)
+                .minimumScaleFactor(0.6).lineLimit(1)
             Text(title)
-                .font(.caption)
-                .foregroundColor(.appSecondary)
+                .font(.caption).foregroundColor(.appSecondary)
         }
         .padding()
         .background(Color.appSurface)
@@ -244,34 +221,25 @@ struct PlatformBreakdownRow: View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
                 Text(platform.displayName)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(.appPrimary)
+                    .font(.subheadline).fontWeight(.medium).foregroundColor(.appPrimary)
                 HStack(spacing: 8) {
                     Text("Balance: \(AppFormatter.currency(platform.currentBalance, code: platform.displayCurrency))")
-                        .font(.caption)
-                        .foregroundColor(.appSecondary)
-                    Text("·")
-                        .foregroundColor(.appBorder)
+                        .font(.caption).foregroundColor(.appSecondary)
+                    Text("·").foregroundColor(.appBorder)
                     Text("\(platform.onlineSessionsArray.count) sessions")
-                        .font(.caption)
-                        .foregroundColor(.appSecondary)
+                        .font(.caption).foregroundColor(.appSecondary)
                 }
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 4) {
                 Text(AppFormatter.currencySigned(platform.netResult))
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
+                    .font(.subheadline).fontWeight(.semibold)
                     .foregroundColor(platform.netResult.profitColor)
                 Text("net result")
-                    .font(.caption2)
-                    .foregroundColor(.appSecondary)
+                    .font(.caption2).foregroundColor(.appSecondary)
             }
         }
-        .padding()
-        .background(Color.appSurface)
-        .cornerRadius(8)
+        .padding().background(Color.appSurface).cornerRadius(8)
     }
 }
 
@@ -286,8 +254,7 @@ struct DateFilterChip: View {
                 .font(.caption)
                 .fontWeight(isSelected ? .semibold : .regular)
                 .foregroundColor(isSelected ? .black : .appSecondary)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 6)
+                .padding(.horizontal, 14).padding(.vertical, 6)
                 .background(isSelected ? Color.appGold : Color.appSurface2)
                 .cornerRadius(16)
         }
@@ -305,8 +272,7 @@ struct SessionFilterChip: View {
                 .font(.caption)
                 .fontWeight(isSelected ? .semibold : .regular)
                 .foregroundColor(isSelected ? .black : .appSecondary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
+                .padding(.horizontal, 12).padding(.vertical, 6)
                 .background(isSelected ? Color.appGold : Color.appSurface2)
                 .cornerRadius(16)
                 .overlay(

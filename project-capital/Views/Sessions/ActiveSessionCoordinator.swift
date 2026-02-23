@@ -1,11 +1,11 @@
 import Foundation
 import Combine
+import SwiftUI
 
 class ActiveSessionCoordinator: ObservableObject {
 
     enum GameCategory {
         case cashGame
-        // Future: case tournament, sitngo, ...
     }
 
     @Published var isFormPresented = false

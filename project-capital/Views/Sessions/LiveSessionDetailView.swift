@@ -28,7 +28,8 @@ struct LiveSessionDetailView: View {
     let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var duration: Double { endTime.timeIntervalSince(startTime) / 3600.0 }
-    var netPL: Double { (Double(cashOut) ?? 0) - (Double(buyIn) ?? 0) - (Double(tips) ?? 0) }
+    // Net result excludes tips — tips are for record-keeping only
+    var netPL: Double { (Double(cashOut) ?? 0) - (Double(buyIn) ?? 0) }
     var netPLBase: Double { netPL * (Double(exchangeRate) ?? 1.0) }
     var isSameCurrency: Bool { currency == baseCurrency }
     var estimatedHands: Int { Int(max(0, duration) * Double(UserSettings.shared.handsPerHourLive)) }
@@ -222,7 +223,7 @@ struct LiveSessionDetailView: View {
             .listRowBackground(Color.appSurface)
 
             HStack {
-                Text("Net P&L").foregroundColor(.appPrimary)
+                Text("Net Result").foregroundColor(.appPrimary)
                 Spacer()
                 VStack(alignment: .trailing, spacing: 2) {
                     Text(AppFormatter.currencySigned(netPL, code: currency))
@@ -311,7 +312,7 @@ struct LiveSessionDetailView: View {
         session.buyIn = Double(buyIn) ?? 0
         session.cashOut = Double(cashOut) ?? 0
         session.tips = Double(tips) ?? 0
-        session.netProfitLoss = netPL
+        session.netProfitLoss = netPL       // tips excluded
         session.netProfitLossBase = netPLBase
         session.handsCount = Int32(handsOverride) ?? 0
         session.notes = notes.isEmpty ? nil : notes

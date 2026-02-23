@@ -15,65 +15,63 @@ struct PlatformsListView: View {
     @State private var showDeleteAlert = false
 
     var body: some View {
-        NavigationView {
-            ZStack {
-                Color.appBackground.ignoresSafeArea()
-                if platforms.isEmpty {
-                    emptyState
-                } else {
-                    List {
-                        ForEach(Array(platforms)) { platform in
-                            NavigationLink {
-                                PlatformDetailView(platform: platform)
+        ZStack {
+            Color.appBackground.ignoresSafeArea()
+            if platforms.isEmpty {
+                emptyState
+            } else {
+                List {
+                    ForEach(Array(platforms)) { platform in
+                        NavigationLink {
+                            PlatformDetailView(platform: platform)
+                        } label: {
+                            PlatformRowView(platform: platform, baseCurrency: baseCurrency)
+                        }
+                        .listRowBackground(Color.appSurface)
+                        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button(role: .destructive) {
+                                platformToDelete = platform
+                                showDeleteAlert = true
                             } label: {
-                                PlatformRowView(platform: platform, baseCurrency: baseCurrency)
-                            }
-                            .listRowBackground(Color.appSurface)
-                            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
-                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                Button(role: .destructive) {
-                                    platformToDelete = platform
-                                    showDeleteAlert = true
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
-                                }
+                                Label("Delete", systemImage: "trash")
                             }
                         }
                     }
-                    .listStyle(.plain)
-                    .scrollContentBackground(.hidden)
-                    .background(Color.appBackground)
+                }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+                .background(Color.appBackground)
+            }
+        }
+        .navigationTitle("Platforms")
+        .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    showAddPlatform = true
+                } label: {
+                    Image(systemName: "plus")
+                        .foregroundColor(.appGold)
                 }
             }
-            .navigationTitle("Platforms")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        showAddPlatform = true
-                    } label: {
-                        Image(systemName: "plus")
-                            .foregroundColor(.appGold)
-                    }
+        }
+        .sheet(isPresented: $showAddPlatform) {
+            AddPlatformView()
+        }
+        .alert(deleteAlertTitle, isPresented: $showDeleteAlert) {
+            Button("Delete", role: .destructive) {
+                if let p = platformToDelete {
+                    viewContext.delete(p)
+                    try? viewContext.save()
                 }
+                platformToDelete = nil
             }
-            .sheet(isPresented: $showAddPlatform) {
-                AddPlatformView()
+            Button("Cancel", role: .cancel) {
+                platformToDelete = nil
             }
-            .alert(deleteAlertTitle, isPresented: $showDeleteAlert) {
-                Button("Delete", role: .destructive) {
-                    if let p = platformToDelete {
-                        viewContext.delete(p)
-                        try? viewContext.save()
-                    }
-                    platformToDelete = nil
-                }
-                Button("Cancel", role: .cancel) {
-                    platformToDelete = nil
-                }
-            } message: {
-                Text(deleteAlertMessage)
-            }
+        } message: {
+            Text(deleteAlertMessage)
         }
     }
 

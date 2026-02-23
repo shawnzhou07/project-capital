@@ -19,47 +19,45 @@ struct AdjustmentsListView: View {
     }
 
     var body: some View {
-        NavigationView {
-            ZStack {
-                Color.appBackground.ignoresSafeArea()
-                VStack(spacing: 0) {
-                    if !adjustments.isEmpty {
-                        totalBar
-                    }
-                    if adjustments.isEmpty {
-                        emptyState
-                    } else {
-                        adjustmentList
-                    }
+        ZStack {
+            Color.appBackground.ignoresSafeArea()
+            VStack(spacing: 0) {
+                if !adjustments.isEmpty {
+                    totalBar
+                }
+                if adjustments.isEmpty {
+                    emptyState
+                } else {
+                    adjustmentList
                 }
             }
-            .navigationTitle("Adjustments")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        showAddAdjustment = true
-                    } label: {
-                        Image(systemName: "plus")
-                            .foregroundColor(.appGold)
-                    }
+        }
+        .navigationTitle("Adjustments")
+        .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    showAddAdjustment = true
+                } label: {
+                    Image(systemName: "plus")
+                        .foregroundColor(.appGold)
                 }
             }
-            .sheet(isPresented: $showAddAdjustment) {
-                AddAdjustmentView()
-            }
-            .alert("Delete Adjustment?", isPresented: $showDeleteAlert) {
-                Button("Delete", role: .destructive) {
-                    if let a = adjustmentToDelete {
-                        viewContext.delete(a)
-                        try? viewContext.save()
-                        adjustmentToDelete = nil
-                    }
+        }
+        .sheet(isPresented: $showAddAdjustment) {
+            AddAdjustmentView()
+        }
+        .alert("Delete Adjustment?", isPresented: $showDeleteAlert) {
+            Button("Delete", role: .destructive) {
+                if let a = adjustmentToDelete {
+                    viewContext.delete(a)
+                    try? viewContext.save()
+                    adjustmentToDelete = nil
                 }
-                Button("Cancel", role: .cancel) { adjustmentToDelete = nil }
-            } message: {
-                Text("This cannot be undone.")
             }
+            Button("Cancel", role: .cancel) { adjustmentToDelete = nil }
+        } message: {
+            Text("This cannot be undone.")
         }
     }
 
@@ -108,7 +106,7 @@ struct AdjustmentsListView: View {
             Text("No Adjustments")
                 .font(.headline)
                 .foregroundColor(.appPrimary)
-            Text("Track rakeback, bonuses, and other adjustments")
+            Text("Record financial corrections and miscellaneous entries")
                 .font(.subheadline)
                 .foregroundColor(.appSecondary)
                 .multilineTextAlignment(.center)

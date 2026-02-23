@@ -15,9 +15,9 @@ struct LiveSessionEntryView: View {
     @State private var entryState: EntryState = .preStart
     @State private var coreDataSession: LiveCash? = nil
 
-    // Timing
-    @State private var sessionStartTime: Date? = nil
-    @State private var sessionEndTime: Date? = nil
+    // Timing state vars (always editable)
+    @State private var startTime = Date()
+    @State private var endTime = Date()
 
     // Form fields
     @State private var location = ""
@@ -33,6 +33,7 @@ struct LiveSessionEntryView: View {
     @State private var notes = ""
 
     @State private var showDiscardAlert = false
+    @State private var showRequiredFieldsAlert = false
     @State private var tick = Date()
     let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
@@ -40,23 +41,28 @@ struct LiveSessionEntryView: View {
 
     var isSameCurrency: Bool { currency == baseCurrency }
 
-    var netPL: Double {
-        (Double(cashOut) ?? 0) - (Double(buyIn) ?? 0) - (Double(tips) ?? 0)
+    // Net result excludes tips (tips tracked for record-keeping only)
+    var netResult: Double {
+        (Double(cashOut) ?? 0) - (Double(buyIn) ?? 0)
     }
 
-    var netPLBase: Double {
-        netPL * (Double(exchangeRate) ?? 1.0)
+    var netResultBase: Double {
+        netResult * (Double(exchangeRate) ?? 1.0)
     }
 
     var estimatedHands: Int {
-        let hours = sessionDurationHours
-        return Int(max(0, hours) * Double(UserSettings.shared.handsPerHourLive))
+        Int(max(0, sessionDurationHours) * Double(UserSettings.shared.handsPerHourLive))
     }
 
     var sessionDurationHours: Double {
-        guard let start = sessionStartTime else { return 0 }
-        let end = sessionEndTime ?? tick
-        return max(0, end.timeIntervalSince(start) / 3600.0)
+        switch entryState {
+        case .preStart:
+            return 0
+        case .active:
+            return max(0, tick.timeIntervalSince(startTime) / 3600.0)
+        case .stopped:
+            return max(0, endTime.timeIntervalSince(startTime) / 3600.0)
+        }
     }
 
     var elapsedText: String {
@@ -66,7 +72,7 @@ struct LiveSessionEntryView: View {
         return "\(h)h \(m)m"
     }
 
-    var isValid: Bool {
+    var isValidForSave: Bool {
         !location.isEmpty && !blinds.isEmpty
     }
 
@@ -80,13 +86,10 @@ struct LiveSessionEntryView: View {
         Form {
             locationSection
             sessionDetailsSection
-            timingStatusSection
+            timingSection
             financialsSection
             handsSection
             notesSection
-            if entryState == .stopped {
-                saveSection
-            }
         }
         .scrollContentBackground(.hidden)
         .background(Color.appBackground)
@@ -95,27 +98,7 @@ struct LiveSessionEntryView: View {
         .navigationBarBackButtonHidden(true)
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
-                if entryState == .active {
-                    Button {
-                        coordinator.dismissForm()
-                    } label: {
-                        Image(systemName: "chevron.left")
-                            .foregroundColor(.appGold)
-                    }
-                } else {
-                    Button {
-                        if entryState == .preStart && hasData {
-                            showDiscardAlert = true
-                        } else if entryState == .stopped {
-                            showDiscardAlert = true
-                        } else {
-                            coordinator.dismissForm()
-                        }
-                    } label: {
-                        Image(systemName: "xmark")
-                            .foregroundColor(.appSecondary)
-                    }
-                }
+                leadingButton
             }
             if entryState == .preStart {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -130,14 +113,18 @@ struct LiveSessionEntryView: View {
                         .foregroundColor(.appLoss)
                 }
             }
+            // No trailing button when stopped
         }
         .alert("Discard session?", isPresented: $showDiscardAlert) {
-            Button("Discard", role: .destructive) {
-                discardSession()
-            }
+            Button("Discard", role: .destructive) { discardSession() }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("All entered data will be lost.")
+        }
+        .alert("Required Fields Missing", isPresented: $showRequiredFieldsAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Please fill in all required fields before saving your session.")
         }
         .onAppear {
             currency = baseCurrency
@@ -146,8 +133,34 @@ struct LiveSessionEntryView: View {
             }
         }
         .onReceive(timer) { t in
-            if entryState == .active {
-                tick = t
+            if entryState == .active { tick = t }
+        }
+    }
+
+    @ViewBuilder
+    private var leadingButton: some View {
+        switch entryState {
+        case .preStart:
+            Button {
+                if hasData { showDiscardAlert = true } else { coordinator.dismissForm() }
+            } label: {
+                Image(systemName: "xmark").foregroundColor(.appSecondary)
+            }
+        case .active:
+            // Minimize — no validation required
+            Button { coordinator.dismissForm() } label: {
+                Image(systemName: "chevron.left").foregroundColor(.appGold)
+            }
+        case .stopped:
+            // Save with validation
+            Button {
+                if isValidForSave {
+                    saveFinal()
+                } else {
+                    showRequiredFieldsAlert = true
+                }
+            } label: {
+                Image(systemName: "chevron.left").foregroundColor(.appGold)
             }
         }
     }
@@ -164,9 +177,7 @@ struct LiveSessionEntryView: View {
             .listRowBackground(Color.appSurface)
 
             Picker("Currency", selection: $currency) {
-                ForEach(supportedCurrencies, id: \.self) { c in
-                    Text(c).tag(c)
-                }
+                ForEach(supportedCurrencies, id: \.self) { Text($0).tag($0) }
             }
             .foregroundColor(.appPrimary)
             .tint(.appGold)
@@ -175,8 +186,7 @@ struct LiveSessionEntryView: View {
 
             if !isSameCurrency {
                 HStack {
-                    Text("Exchange Rate")
-                        .foregroundColor(.appPrimary)
+                    Text("Exchange Rate").foregroundColor(.appPrimary)
                     Spacer()
                     TextField("1.0000", text: $exchangeRate)
                         .keyboardType(.decimalPad)
@@ -185,8 +195,7 @@ struct LiveSessionEntryView: View {
                         .frame(width: 100)
                         .onChange(of: exchangeRate) { _, _ in autoSaveIfActive() }
                     Text("\(currency)/\(baseCurrency)")
-                        .font(.caption)
-                        .foregroundColor(.appSecondary)
+                        .font(.caption).foregroundColor(.appSecondary)
                 }
                 .listRowBackground(Color.appSurface)
             }
@@ -205,8 +214,7 @@ struct LiveSessionEntryView: View {
             .onChange(of: gameType) { _, _ in autoSaveIfActive() }
 
             HStack {
-                Text("Blinds")
-                    .foregroundColor(.appPrimary)
+                Text("Blinds").foregroundColor(.appPrimary)
                 Spacer()
                 TextField("1/2", text: $blinds)
                     .multilineTextAlignment(.trailing)
@@ -224,56 +232,51 @@ struct LiveSessionEntryView: View {
         }
     }
 
-    @ViewBuilder
-    var timingStatusSection: some View {
-        switch entryState {
-        case .preStart:
-            EmptyView()
-        case .active:
-            Section {
-                HStack {
-                    HStack(spacing: 8) {
-                        Circle()
-                            .fill(Color.appGold)
-                            .frame(width: 8, height: 8)
-                        Text("Session Active")
-                            .foregroundColor(.appPrimary)
-                    }
-                    Spacer()
-                    Text(elapsedText)
-                        .foregroundColor(.appGold)
-                        .fontWeight(.medium)
-                        .monospacedDigit()
-                }
+    var timingSection: some View {
+        Section {
+            DatePicker("Start Time", selection: $startTime)
+                .foregroundColor(.appPrimary)
+                .tint(.appGold)
                 .listRowBackground(Color.appSurface)
-            } header: {
-                Text("Timing").foregroundColor(.appGold).textCase(nil)
-            }
-        case .stopped:
-            Section {
-                HStack {
-                    Text("Duration")
-                        .foregroundColor(.appPrimary)
-                    Spacer()
+                .onChange(of: startTime) { _, _ in autoSaveIfActive() }
+
+            DatePicker("End Time", selection: $endTime)
+                .foregroundColor(.appPrimary)
+                .tint(.appGold)
+                .listRowBackground(Color.appSurface)
+                .disabled(entryState != .stopped)
+                .opacity(entryState == .stopped ? 1.0 : 0.4)
+
+            HStack {
+                Text("Duration").foregroundColor(.appPrimary)
+                Spacer()
+                if entryState == .active {
+                    HStack(spacing: 6) {
+                        Circle().fill(Color.appGold).frame(width: 6, height: 6)
+                        Text(elapsedText)
+                            .foregroundColor(.appGold)
+                            .fontWeight(.medium)
+                            .monospacedDigit()
+                    }
+                } else if entryState == .stopped {
                     Text(AppFormatter.duration(sessionDurationHours))
                         .foregroundColor(.appSecondary)
+                } else {
+                    Text("—").foregroundColor(.appSecondary)
                 }
-                .listRowBackground(Color.appSurface)
-            } header: {
-                Text("Timing").foregroundColor(.appGold).textCase(nil)
             }
+            .listRowBackground(Color.appSurface)
+        } header: {
+            Text("Timing").foregroundColor(.appGold).textCase(nil)
         }
     }
 
     var financialsSection: some View {
         Section {
             HStack {
-                Text("Buy In")
-                    .foregroundColor(.appPrimary)
+                Text("Buy In").foregroundColor(.appPrimary)
                 Spacer()
-                Text(currency)
-                    .font(.caption)
-                    .foregroundColor(.appSecondary)
+                Text(currency).font(.caption).foregroundColor(.appSecondary)
                 TextField("0.00", text: $buyIn)
                     .keyboardType(.decimalPad)
                     .multilineTextAlignment(.trailing)
@@ -284,12 +287,9 @@ struct LiveSessionEntryView: View {
             .listRowBackground(Color.appSurface)
 
             HStack {
-                Text("Cash Out")
-                    .foregroundColor(.appPrimary)
+                Text("Cash Out").foregroundColor(.appPrimary)
                 Spacer()
-                Text(currency)
-                    .font(.caption)
-                    .foregroundColor(.appSecondary)
+                Text(currency).font(.caption).foregroundColor(.appSecondary)
                 TextField("0.00", text: $cashOut)
                     .keyboardType(.decimalPad)
                     .multilineTextAlignment(.trailing)
@@ -300,12 +300,9 @@ struct LiveSessionEntryView: View {
             .listRowBackground(Color.appSurface)
 
             HStack {
-                Text("Tips")
-                    .foregroundColor(.appPrimary)
+                Text("Tips").foregroundColor(.appPrimary)
                 Spacer()
-                Text(currency)
-                    .font(.caption)
-                    .foregroundColor(.appSecondary)
+                Text(currency).font(.caption).foregroundColor(.appSecondary)
                 TextField("0.00", text: $tips)
                     .keyboardType(.decimalPad)
                     .multilineTextAlignment(.trailing)
@@ -316,17 +313,16 @@ struct LiveSessionEntryView: View {
             .listRowBackground(Color.appSurface)
 
             HStack {
-                Text("Net P&L")
-                    .foregroundColor(.appPrimary)
+                Text("Net Result").foregroundColor(.appPrimary)
                 Spacer()
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text(AppFormatter.currencySigned(netPL, code: currency))
+                    Text(AppFormatter.currencySigned(netResult, code: currency))
                         .fontWeight(.semibold)
-                        .foregroundColor(netPL.profitColor)
+                        .foregroundColor(netResult.profitColor)
                     if !isSameCurrency {
-                        Text(AppFormatter.currencySigned(netPLBase, code: baseCurrency))
+                        Text(AppFormatter.currencySigned(netResultBase, code: baseCurrency))
                             .font(.caption)
-                            .foregroundColor(netPLBase.profitColor)
+                            .foregroundColor(netResultBase.profitColor)
                     }
                 }
             }
@@ -339,8 +335,7 @@ struct LiveSessionEntryView: View {
     var handsSection: some View {
         Section {
             HStack {
-                Text("Hands Played")
-                    .foregroundColor(.appPrimary)
+                Text("Hands Played").foregroundColor(.appPrimary)
                 Spacer()
                 TextField("Auto (\(estimatedHands) est.)", text: $handsOverride)
                     .keyboardType(.numberPad)
@@ -369,25 +364,10 @@ struct LiveSessionEntryView: View {
         }
     }
 
-    var saveSection: some View {
-        Section {
-            Button {
-                saveFinal()
-            } label: {
-                Text("Save Session")
-                    .font(.headline)
-                    .foregroundColor(isValid ? .black : .appSecondary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 4)
-            }
-            .disabled(!isValid)
-            .listRowBackground(isValid ? Color.appGold : Color.appSurface2)
-        }
-    }
-
     // MARK: - Actions
 
     func handleStart() {
+        startTime = Date()
         let session = LiveCash(context: viewContext)
         session.id = UUID()
         session.location = location
@@ -400,12 +380,11 @@ struct LiveSessionEntryView: View {
         session.cashOut = Double(cashOut) ?? 0
         session.tips = Double(tips) ?? 0
         session.notes = notes.isEmpty ? nil : notes
-        session.startTime = Date()
+        session.startTime = startTime
 
         do {
             try viewContext.save()
             coreDataSession = session
-            sessionStartTime = session.startTime
             entryState = .active
         } catch {
             print("Start error: \(error)")
@@ -414,12 +393,11 @@ struct LiveSessionEntryView: View {
 
     func handleStop() {
         guard let session = coreDataSession else { return }
-        let end = Date()
-        session.endTime = end
-        session.duration = max(0, end.timeIntervalSince(session.startTime ?? end) / 3600.0)
+        endTime = Date()
+        session.endTime = endTime
+        session.duration = max(0, endTime.timeIntervalSince(startTime) / 3600.0)
         do {
             try viewContext.save()
-            sessionEndTime = end
             entryState = .stopped
         } catch {
             print("Stop error: \(error)")
@@ -434,14 +412,16 @@ struct LiveSessionEntryView: View {
         session.gameType = gameType
         session.blinds = blinds
         session.tableSize = Int16(tableSize)
+        session.startTime = startTime
+        session.endTime = endTime
+        session.duration = sessionDurationHours
         session.buyIn = Double(buyIn) ?? 0
         session.cashOut = Double(cashOut) ?? 0
         session.tips = Double(tips) ?? 0
-        session.netProfitLoss = netPL
-        session.netProfitLossBase = netPLBase
+        session.netProfitLoss = netResult
+        session.netProfitLossBase = netResultBase
         session.handsCount = Int32(handsOverride) ?? 0
         session.notes = notes.isEmpty ? nil : notes
-        session.duration = sessionDurationHours
 
         do {
             try viewContext.save()
@@ -487,7 +467,7 @@ struct LiveSessionEntryView: View {
         tips = session.tips > 0 ? String(session.tips) : "0"
         handsOverride = session.handsCount > 0 ? String(session.handsCount) : ""
         notes = session.notes ?? ""
-        sessionStartTime = session.startTime
+        startTime = session.startTime ?? Date()
         entryState = .active
     }
 }
