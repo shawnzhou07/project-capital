@@ -71,6 +71,7 @@ public class OnlineCash: NSManagedObject {
     @NSManaged public var exchangeRateToBase: Double
     @NSManaged public var handsCount: Int32
     @NSManaged public var notes: String?
+    @NSManaged public var isVerified: Bool
     @NSManaged public var platform: Platform?
 
     public static func fetchRequest() -> NSFetchRequest<OnlineCash> {
@@ -94,6 +95,8 @@ public class LiveCash: NSManagedObject {
     @NSManaged public var location: String?
     @NSManaged public var currency: String?
     @NSManaged public var exchangeRateToBase: Double
+    @NSManaged public var exchangeRateBuyIn: Double
+    @NSManaged public var exchangeRateCashOut: Double
     @NSManaged public var buyIn: Double
     @NSManaged public var cashOut: Double
     @NSManaged public var tips: Double
@@ -101,6 +104,7 @@ public class LiveCash: NSManagedObject {
     @NSManaged public var netProfitLossBase: Double
     @NSManaged public var handsCount: Int32
     @NSManaged public var notes: String?
+    @NSManaged public var isVerified: Bool
 
     public static func fetchRequest() -> NSFetchRequest<LiveCash> {
         NSFetchRequest<LiveCash>(entityName: "LiveCash")

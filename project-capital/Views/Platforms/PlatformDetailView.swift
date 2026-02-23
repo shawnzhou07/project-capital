@@ -11,11 +11,14 @@ struct PlatformDetailView: View {
     @State private var showWithdrawal = false
     @State private var showDeleteAlert = false
     @State private var loaded = false
-    @State private var depositToDelete: Deposit? = nil
-    @State private var withdrawalToDelete: Withdrawal? = nil
-    @State private var showDepositDeleteAlert = false
-    @State private var showWithdrawalDeleteAlert = false
     @Environment(\.dismiss) private var dismiss
+
+    var hasAnyRecords: Bool {
+        !platform.depositsArray.isEmpty ||
+        !platform.withdrawalsArray.isEmpty ||
+        !platform.onlineSessionsArray.isEmpty ||
+        !platform.adjustmentsArray.isEmpty
+    }
 
     var body: some View {
         ZStack {
@@ -54,28 +57,8 @@ struct PlatformDetailView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This will delete all associated sessions, deposits, and withdrawals. This cannot be undone.")
+            Text("This will permanently delete this platform. This cannot be undone.")
         }
-        .alert("Delete Deposit?", isPresented: $showDepositDeleteAlert) {
-            Button("Delete", role: .destructive) {
-                if let d = depositToDelete {
-                    viewContext.delete(d)
-                    try? viewContext.save()
-                    depositToDelete = nil
-                }
-            }
-            Button("Cancel", role: .cancel) { depositToDelete = nil }
-        } message: { Text("This cannot be undone.") }
-        .alert("Delete Withdrawal?", isPresented: $showWithdrawalDeleteAlert) {
-            Button("Delete", role: .destructive) {
-                if let w = withdrawalToDelete {
-                    viewContext.delete(w)
-                    try? viewContext.save()
-                    withdrawalToDelete = nil
-                }
-            }
-            Button("Cancel", role: .cancel) { withdrawalToDelete = nil }
-        } message: { Text("This cannot be undone.") }
     }
 
     // MARK: - Balance Card
@@ -83,7 +66,6 @@ struct PlatformDetailView: View {
     var balanceCard: some View {
         VStack(spacing: 16) {
             HStack(alignment: .top) {
-                // LEFT — Net Result (primary, larger)
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Net Result")
                         .font(.caption)
@@ -99,7 +81,6 @@ struct PlatformDetailView: View {
                     }
                 }
                 Spacer()
-                // RIGHT — Current Balance (secondary, smaller)
                 VStack(alignment: .trailing, spacing: 4) {
                     Text("Current Balance")
                         .font(.caption)
@@ -235,7 +216,7 @@ struct PlatformDetailView: View {
         }
     }
 
-    // MARK: - Deposits Section
+    // MARK: - Deposits Section (no delete)
 
     var depositsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -254,20 +235,12 @@ struct PlatformDetailView: View {
             } else {
                 ForEach(platform.depositsArray.reversed()) { deposit in
                     DepositRowView(deposit: deposit, platformCurrency: platform.displayCurrency)
-                        .contextMenu {
-                            Button(role: .destructive) {
-                                depositToDelete = deposit
-                                showDepositDeleteAlert = true
-                            } label: {
-                                Label("Delete", systemImage: "trash")
-                            }
-                        }
                 }
             }
         }
     }
 
-    // MARK: - Withdrawals Section
+    // MARK: - Withdrawals Section (no delete)
 
     var withdrawalsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -286,14 +259,6 @@ struct PlatformDetailView: View {
             } else {
                 ForEach(platform.withdrawalsArray.reversed()) { withdrawal in
                     WithdrawalRowView(withdrawal: withdrawal, platformCurrency: platform.displayCurrency)
-                        .contextMenu {
-                            Button(role: .destructive) {
-                                withdrawalToDelete = withdrawal
-                                showWithdrawalDeleteAlert = true
-                            } label: {
-                                Label("Delete", systemImage: "trash")
-                            }
-                        }
                 }
             }
         }
@@ -302,17 +267,29 @@ struct PlatformDetailView: View {
     // MARK: - Danger Zone
 
     var dangerZone: some View {
-        Button(role: .destructive) {
-            showDeleteAlert = true
-        } label: {
-            Text("Delete Platform")
-                .font(.subheadline)
-                .foregroundColor(.appLoss)
-                .frame(maxWidth: .infinity)
-                .padding()
-                .background(Color.appSurface)
-                .cornerRadius(8)
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.appLoss.opacity(0.3), lineWidth: 1))
+        Group {
+            if hasAnyRecords {
+                Text("Cannot delete platform with existing records")
+                    .font(.subheadline)
+                    .foregroundColor(Color(hex: "#8A8A8A"))
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.appSurface)
+                    .cornerRadius(8)
+            } else {
+                Button(role: .destructive) {
+                    showDeleteAlert = true
+                } label: {
+                    Text("Delete Platform")
+                        .font(.subheadline)
+                        .foregroundColor(.appLoss)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.appSurface)
+                        .cornerRadius(8)
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.appLoss.opacity(0.3), lineWidth: 1))
+                }
+            }
         }
     }
 

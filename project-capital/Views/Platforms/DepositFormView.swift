@@ -15,6 +15,7 @@ struct DepositFormView: View {
     @State private var method = "E-Transfer"
 
     @State private var showNegativeFeeWarning = false
+    @State private var showLockConfirmation = false
 
     var isSameCurrency: Bool { platform.displayCurrency == baseCurrency }
 
@@ -65,10 +66,16 @@ struct DepositFormView: View {
             }
         }
         .alert("Negative Processing Fee", isPresented: $showNegativeFeeWarning) {
-            Button("Save Anyway") { performSave() }
+            Button("Save Anyway") { showLockConfirmation = true }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("A negative processing fee means you gained money on this transaction. Please verify this is correct.")
+        }
+        .alert("Permanently Save Deposit?", isPresented: $showLockConfirmation) {
+            Button("Confirm") { performSave() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This deposit will be permanently saved and cannot be edited or deleted after confirmation. Are you sure?")
         }
     }
 
@@ -167,7 +174,7 @@ struct DepositFormView: View {
                 if !isSameCurrency && !isForeignExchange && processingFee < 0 {
                     showNegativeFeeWarning = true
                 } else {
-                    performSave()
+                    showLockConfirmation = true
                 }
             } label: {
                 Text("Save Deposit")

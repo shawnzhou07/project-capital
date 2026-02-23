@@ -17,6 +17,37 @@ struct UserSettings {
     var showAdjustmentsInStats: Bool {
         UserDefaults.standard.object(forKey: "showAdjustmentsInStats") as? Bool ?? true
     }
+    // "direct" = Mode A (enter rate directly), "amounts" = Mode B (enter amounts)
+    var exchangeRateInputMode: String {
+        UserDefaults.standard.string(forKey: "exchangeRateInputMode") ?? "direct"
+    }
+    var defaultRateUSDToBase: Double {
+        let v = UserDefaults.standard.double(forKey: "defaultRateUSDToBase")
+        return v > 0 ? v : 1.36
+    }
+    var defaultRateEURToBase: Double {
+        let v = UserDefaults.standard.double(forKey: "defaultRateEURToBase")
+        return v > 0 ? v : 1.47
+    }
+    var defaultRateUSDToEUR: Double {
+        let v = UserDefaults.standard.double(forKey: "defaultRateUSDToEUR")
+        return v > 0 ? v : 0.92
+    }
+
+    // Returns the best default exchange rate for a given session currency → base currency
+    func defaultExchangeRate(sessionCurrency: String, baseCurrency: String) -> Double {
+        if sessionCurrency == baseCurrency { return 1.0 }
+        let key = "\(sessionCurrency)-\(baseCurrency)"
+        switch key {
+        case "USD-CAD": return defaultRateUSDToBase
+        case "EUR-CAD": return defaultRateEURToBase
+        case "USD-EUR": return defaultRateUSDToEUR
+        case "CAD-USD": return defaultRateUSDToBase > 0 ? 1.0 / defaultRateUSDToBase : 0.73
+        case "CAD-EUR": return defaultRateEURToBase > 0 ? 1.0 / defaultRateEURToBase : 0.68
+        case "EUR-USD": return defaultRateUSDToEUR > 0 ? 1.0 / defaultRateUSDToEUR : 1.09
+        default: return 1.0
+        }
+    }
 }
 
 private extension Int {

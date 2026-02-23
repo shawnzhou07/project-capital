@@ -136,7 +136,12 @@ extension LiveCash {
 
     // Net result excludes tips — tips are for record-keeping only
     var netResult: Double { cashOut - buyIn }
-    var netResultBase: Double { netResult * exchangeRateToBase }
+    // Use exchangeRateCashOut when set (new dual-rate system), fall back to exchangeRateToBase
+    var netResultBase: Double {
+        let rate = exchangeRateCashOut > 0 ? exchangeRateCashOut : exchangeRateToBase
+        return netResult * rate
+    }
+    var hasExchangeRates: Bool { currency != nil && currency != "" }
 }
 
 // MARK: - Stats Computation

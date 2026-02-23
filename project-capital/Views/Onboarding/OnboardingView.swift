@@ -4,6 +4,7 @@ import CoreData
 struct OnboardingView: View {
     @State private var step = 0
     @State private var selectedCurrency = "CAD"
+    @State private var selectedExchangeMode = "direct"
     @State private var selectedPlatforms: Set<String> = []
     @State private var platformBalances: [String: String] = [:]
     @State private var customPlatformName = ""
@@ -20,8 +21,9 @@ struct OnboardingView: View {
             switch step {
             case 0: welcomeStep
             case 1: currencyStep
-            case 2: platformsStep
-            case 3: balancesStep
+            case 2: exchangeRateModeStep
+            case 3: platformsStep
+            case 4: balancesStep
             default: welcomeStep
             }
         }
@@ -66,7 +68,7 @@ struct OnboardingView: View {
 
     var currencyStep: some View {
         VStack(spacing: 0) {
-            OnboardingHeader(title: "Base Currency", subtitle: "All profits will be reported in this currency. This cannot be changed later.", step: "1 of 3")
+            OnboardingHeader(title: "Base Currency", subtitle: "All profits will be reported in this currency. This cannot be changed later.", step: "1 of 4")
             ScrollView {
                 VStack(spacing: 12) {
                     ForEach(["CAD", "USD", "EUR"], id: \.self) { currency in
@@ -91,11 +93,53 @@ struct OnboardingView: View {
         }
     }
 
-    // MARK: - Step 2: Select Platforms
+    // MARK: - Step 2: Exchange Rate Input Mode
+
+    var exchangeRateModeStep: some View {
+        VStack(spacing: 0) {
+            OnboardingHeader(
+                title: "Exchange Rate Input",
+                subtitle: "How do you prefer to enter exchange rates for foreign currency sessions?",
+                step: "2 of 4"
+            )
+            ScrollView {
+                VStack(spacing: 12) {
+                    ExchangeModeCard(
+                        title: "Enter Rate Directly",
+                        description: "You type the exchange rate (e.g. 1.36 CAD per USD). We calculate the base currency equivalent for you.",
+                        example: "Rate: 1.36  →  $100 USD = $136 CAD",
+                        isSelected: selectedExchangeMode == "direct"
+                    ) {
+                        selectedExchangeMode = "direct"
+                    }
+                    ExchangeModeCard(
+                        title: "Enter Amounts",
+                        description: "You type how much you paid or received in both currencies. We calculate the effective exchange rate automatically.",
+                        example: "Paid $136 CAD, received $100 USD  →  Rate: 1.36",
+                        isSelected: selectedExchangeMode == "amounts"
+                    ) {
+                        selectedExchangeMode = "amounts"
+                    }
+                    Text("This can be changed later in Settings → Exchange Rate Input.")
+                        .font(.caption)
+                        .foregroundColor(.appSecondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.top, 4)
+                }
+                .padding()
+            }
+            OnboardingNextButton(title: "Continue") {
+                UserDefaults.standard.set(selectedExchangeMode, forKey: "exchangeRateInputMode")
+                withAnimation { step = 3 }
+            }
+        }
+    }
+
+    // MARK: - Step 3: Select Platforms
 
     var platformsStep: some View {
         VStack(spacing: 0) {
-            OnboardingHeader(title: "Your Platforms", subtitle: "Select the online poker platforms you play on. You can add more later.", step: "2 of 3")
+            OnboardingHeader(title: "Your Platforms", subtitle: "Select the online poker platforms you play on. You can add more later.", step: "3 of 4")
             ScrollView {
                 VStack(spacing: 10) {
                     ForEach(PlatformTemplate.predefined) { template in
@@ -133,7 +177,7 @@ struct OnboardingView: View {
                 .padding()
             }
             OnboardingNextButton(title: "Continue") {
-                withAnimation { step = 3 }
+                withAnimation { step = 4 }
             }
         }
         .sheet(isPresented: $showCustomPlatform) {
@@ -144,11 +188,11 @@ struct OnboardingView: View {
         }
     }
 
-    // MARK: - Step 3: Opening Balances
+    // MARK: - Step 4: Opening Balances
 
     var balancesStep: some View {
         VStack(spacing: 0) {
-            OnboardingHeader(title: "Opening Balances", subtitle: "Set current balances for your selected platforms.", step: "3 of 3")
+            OnboardingHeader(title: "Opening Balances", subtitle: "Set current balances for your selected platforms.", step: "4 of 4")
             ScrollView {
                 VStack(spacing: 12) {
                     ForEach(Array(selectedPlatforms).sorted(), id: \.self) { key in
@@ -310,6 +354,48 @@ struct CurrencySelectionCard: View {
     }
 }
 
+struct ExchangeModeCard: View {
+    let title: String
+    let description: String
+    let example: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text(title)
+                        .font(.headline)
+                        .foregroundColor(.appPrimary)
+                    Spacer()
+                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                        .foregroundColor(isSelected ? .appGold : .appSecondary)
+                        .font(.title3)
+                }
+                Text(description)
+                    .font(.subheadline)
+                    .foregroundColor(.appSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(example)
+                    .font(.caption)
+                    .foregroundColor(.appGold)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Color.appSurface2)
+                    .cornerRadius(6)
+            }
+            .padding()
+            .background(isSelected ? Color.appSurface2 : Color.appSurface)
+            .cornerRadius(8)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(isSelected ? Color.appGold : Color.appBorder, lineWidth: isSelected ? 1.5 : 1)
+            )
+        }
+    }
+}
+
 struct PlatformSelectionRow: View {
     let template: PlatformTemplate
     let baseCurrency: String
@@ -397,7 +483,7 @@ struct CustomPlatformSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             ZStack {
                 Color.appBackground.ignoresSafeArea()
                 Form {

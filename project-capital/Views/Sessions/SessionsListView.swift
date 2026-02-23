@@ -34,18 +34,38 @@ struct SessionsListView: View {
         animation: .default
     ) private var activeOnlineSessions: FetchedResults<OnlineCash>
 
+    // Unverified completed sessions (endTime set, isVerified = false)
+    @FetchRequest(
+        sortDescriptors: [NSSortDescriptor(keyPath: \OnlineCash.startTime, ascending: false)],
+        predicate: NSPredicate(format: "isVerified == NO AND endTime != nil"),
+        animation: .default
+    ) private var unverifiedOnlineSessions: FetchedResults<OnlineCash>
+
+    @FetchRequest(
+        sortDescriptors: [NSSortDescriptor(keyPath: \LiveCash.startTime, ascending: false)],
+        predicate: NSPredicate(format: "isVerified == NO AND endTime != nil"),
+        animation: .default
+    ) private var unverifiedLiveSessions: FetchedResults<LiveCash>
+
     @State private var showActiveSessionAlert = false
+    @State private var showUnverifiedAlert = false
     @State private var filterType: FilterType = .all
     @State private var selectedPlatformFilter: Platform? = nil
     @State private var selectedGameTypeFilter: String? = nil
     @State private var deleteOnlineSession: OnlineCash? = nil
     @State private var deleteLiveSession: LiveCash? = nil
     @State private var showDeleteAlert = false
+    @State private var navigateToUnverifiedOnline: OnlineCash? = nil
+    @State private var navigateToUnverifiedLive: LiveCash? = nil
 
     enum FilterType: String, CaseIterable {
         case all = "All"
         case live = "Live"
         case online = "Online"
+    }
+
+    var hasUnverifiedSession: Bool {
+        !unverifiedOnlineSessions.isEmpty || !unverifiedLiveSessions.isEmpty
     }
 
     var allSessions: [SessionListItem] {
@@ -135,6 +155,14 @@ struct SessionsListView: View {
         } message: {
             Text("You have an active session in progress. Please complete or discard it before starting a new one.")
         }
+        .alert("Unverified Session", isPresented: $showUnverifiedAlert) {
+            Button("OK", role: .cancel) {}
+            Button("Go to Unverified Session") {
+                navigateToUnverifiedSession()
+            }
+        } message: {
+            Text("You have an unverified session. Please verify your previous session before starting a new one.")
+        }
         .alert("Delete Session?", isPresented: $showDeleteAlert) {
             Button("Delete", role: .destructive) {
                 performDelete()
@@ -145,6 +173,12 @@ struct SessionsListView: View {
             }
         } message: {
             Text("This cannot be undone.")
+        }
+        .navigationDestination(item: $navigateToUnverifiedOnline) { session in
+            OnlineSessionDetailView(session: session)
+        }
+        .navigationDestination(item: $navigateToUnverifiedLive) { session in
+            LiveSessionDetailView(session: session)
         }
     }
 
@@ -220,9 +254,7 @@ struct SessionsListView: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .background(Color.appBackground)
-        .refreshable {
-            // Triggers FetchRequest re-evaluation
-        }
+        .refreshable { }
     }
 
     @ViewBuilder
@@ -232,32 +264,51 @@ struct SessionsListView: View {
             NavigationLink {
                 OnlineSessionDetailView(session: s)
             } label: {
-                SessionRowView(
-                    date: s.sessionDate,
-                    icon: "desktopcomputer",
-                    title: s.platformName,
-                    subtitle: "\(s.displayGameType) \(s.displayBlinds)",
-                    duration: s.computedDuration,
-                    netResult: s.netProfitLossBase,
-                    currency: baseCurrency,
-                    isActive: s.isActive
+                VStack(alignment: .leading, spacing: 3) {
+                    SessionRowView(
+                        date: s.sessionDate,
+                        icon: "desktopcomputer",
+                        title: s.platformName,
+                        subtitle: "\(s.displayGameType) \(s.displayBlinds)",
+                        duration: s.computedDuration,
+                        netResult: s.netProfitLossBase,
+                        currency: baseCurrency,
+                        isActive: s.isActive
+                    )
+                    if !s.isVerified {
+                        UnverifiedBadge()
+                    }
+                }
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(s.isVerified ? Color.appGold : Color.clear, lineWidth: 1.5)
                 )
             }
             .listRowBackground(Color.appSurface)
             .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+
         case .live(let s):
             NavigationLink {
                 LiveSessionDetailView(session: s)
             } label: {
-                SessionRowView(
-                    date: s.sessionDate,
-                    icon: "building.columns",
-                    title: s.displayLocation,
-                    subtitle: "\(s.displayGameType) \(s.displayBlinds)",
-                    duration: s.computedDuration,
-                    netResult: s.netProfitLossBase,
-                    currency: baseCurrency,
-                    isActive: s.isActive
+                VStack(alignment: .leading, spacing: 3) {
+                    SessionRowView(
+                        date: s.sessionDate,
+                        icon: "building.columns",
+                        title: s.displayLocation,
+                        subtitle: "\(s.displayGameType) \(s.displayBlinds)",
+                        duration: s.computedDuration,
+                        netResult: s.netProfitLossBase,
+                        currency: baseCurrency,
+                        isActive: s.isActive
+                    )
+                    if !s.isVerified {
+                        UnverifiedBadge()
+                    }
+                }
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(s.isVerified ? Color.appGold : Color.clear, lineWidth: 1.5)
                 )
             }
             .listRowBackground(Color.appSurface)
@@ -286,8 +337,18 @@ struct SessionsListView: View {
     func handleAddTap() {
         if !activeLiveSessions.isEmpty || !activeOnlineSessions.isEmpty {
             showActiveSessionAlert = true
+        } else if hasUnverifiedSession {
+            showUnverifiedAlert = true
         } else {
             sessionCoordinator.openCashGame()
+        }
+    }
+
+    func navigateToUnverifiedSession() {
+        if let session = unverifiedOnlineSessions.first {
+            navigateToUnverifiedOnline = session
+        } else if let session = unverifiedLiveSessions.first {
+            navigateToUnverifiedLive = session
         }
     }
 
@@ -304,6 +365,23 @@ struct SessionsListView: View {
     }
 }
 
+// MARK: - Unverified Badge
+
+struct UnverifiedBadge: View {
+    var body: some View {
+        Text("Unverified")
+            .font(.caption2)
+            .fontWeight(.medium)
+            .foregroundColor(Color(hex: "#8A8A8A"))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(Color(hex: "#1A1A1A"))
+            .cornerRadius(10)
+    }
+}
+
+// MARK: - Session Data Types
+
 enum SessionKind {
     case online(OnlineCash)
     case live(LiveCash)
@@ -314,6 +392,8 @@ struct SessionListItem: Identifiable {
     let date: Date
     let kind: SessionKind
 }
+
+// MARK: - Session Row View
 
 struct SessionRowView: View {
     let date: Date
@@ -376,6 +456,8 @@ struct SessionRowView: View {
         .padding(.vertical, 6)
     }
 }
+
+// MARK: - Filter Chip
 
 struct FilterChip: View {
     let label: String

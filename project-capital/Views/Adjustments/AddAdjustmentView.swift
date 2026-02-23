@@ -20,6 +20,7 @@ struct AddAdjustmentView: View {
     @State private var selectedPlatform: Platform? = nil
     @State private var location = ""
     @State private var notes = ""
+    @State private var showLockConfirmation = false
 
     var amountDouble: Double { Double(amount) ?? 0 }
     var exchangeRateDouble: Double { Double(exchangeRate) ?? 1.0 }
@@ -56,6 +57,12 @@ struct AddAdjustmentView: View {
             }
             .onAppear {
                 currency = baseCurrency
+            }
+            .alert("Permanently Save Adjustment?", isPresented: $showLockConfirmation) {
+                Button("Confirm") { saveAdjustment() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This adjustment will be permanently saved and cannot be edited or deleted after confirmation. Are you sure?")
             }
         }
     }
@@ -210,7 +217,7 @@ struct AddAdjustmentView: View {
     var saveSection: some View {
         Section {
             Button {
-                saveAdjustment()
+                showLockConfirmation = true
             } label: {
                 Text("Save Adjustment")
                     .font(.headline)

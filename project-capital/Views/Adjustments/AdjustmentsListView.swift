@@ -11,8 +11,6 @@ struct AdjustmentsListView: View {
     ) private var adjustments: FetchedResults<Adjustment>
 
     @State private var showAddAdjustment = false
-    @State private var adjustmentToDelete: Adjustment? = nil
-    @State private var showDeleteAlert = false
 
     var totalBase: Double {
         adjustments.reduce(0) { $0 + $1.amountBase }
@@ -47,18 +45,6 @@ struct AdjustmentsListView: View {
         .sheet(isPresented: $showAddAdjustment) {
             AddAdjustmentView()
         }
-        .alert("Delete Adjustment?", isPresented: $showDeleteAlert) {
-            Button("Delete", role: .destructive) {
-                if let a = adjustmentToDelete {
-                    viewContext.delete(a)
-                    try? viewContext.save()
-                    adjustmentToDelete = nil
-                }
-            }
-            Button("Cancel", role: .cancel) { adjustmentToDelete = nil }
-        } message: {
-            Text("This cannot be undone.")
-        }
     }
 
     var totalBar: some View {
@@ -80,17 +66,13 @@ struct AdjustmentsListView: View {
     var adjustmentList: some View {
         List {
             ForEach(Array(adjustments)) { adjustment in
-                AdjustmentRowView(adjustment: adjustment, baseCurrency: baseCurrency)
-                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                        Button(role: .destructive) {
-                            adjustmentToDelete = adjustment
-                            showDeleteAlert = true
-                        } label: {
-                            Label("Delete", systemImage: "trash")
-                        }
-                    }
-                    .listRowBackground(Color.appSurface)
-                    .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                NavigationLink {
+                    AdjustmentDetailView(adjustment: adjustment)
+                } label: {
+                    AdjustmentRowView(adjustment: adjustment, baseCurrency: baseCurrency)
+                }
+                .listRowBackground(Color.appSurface)
+                .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
             }
         }
         .listStyle(.plain)
