@@ -6,14 +6,20 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		8D0393BE2F4CC2740020FE33 /* DataModel.xcdatamodeld in Sources */ = {isa = PBXBuildFile; fileRef = 8D0393BD2F4CC2740020FE33 /* DataModel.xcdatamodeld */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		8D0393982F4CC2740020FE33 /* project-capital.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "project-capital.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		8D0393BD2F4CC2740020FE33 /* DataModel.xcdatamodeld */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; name = DataModel.xcdatamodeld; path = "project-capital/DataModel.xcdatamodeld"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
 		8D0393A82F4CC2750020FE33 /* Exceptions for "project-capital" folder in "project-capital" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				DataModel.xcdatamodeld,
 				Info.plist,
 			);
 			target = 8D0393972F4CC2740020FE33 /* project-capital */;
@@ -46,6 +52,7 @@
 			isa = PBXGroup;
 			children = (
 				8D03939A2F4CC2740020FE33 /* project-capital */,
+				8D0393BD2F4CC2740020FE33 /* DataModel.xcdatamodeld */,
 				8D0393992F4CC2740020FE33 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -132,6 +139,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				8D0393BE2F4CC2740020FE33 /* DataModel.xcdatamodeld in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

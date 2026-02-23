@@ -1,10 +1,3 @@
-//
-//  Persistence.swift
-//  project-capital
-//
-//  Created by Shawn Zhou on 2026-02-23.
-//
-
 import CoreData
 
 struct PersistenceController {
@@ -13,45 +6,85 @@ struct PersistenceController {
     @MainActor
     static let preview: PersistenceController = {
         let result = PersistenceController(inMemory: true)
-        let viewContext = result.container.viewContext
-        for _ in 0..<10 {
-            let newItem = Item(context: viewContext)
-            newItem.timestamp = Date()
-        }
+        let ctx = result.container.viewContext
+
+        // Sample platform
+        let platform = Platform(context: ctx)
+        platform.id = UUID()
+        platform.name = "PokerStars Ontario"
+        platform.currency = "CAD"
+        platform.currentBalance = 500.0
+        platform.createdAt = Date()
+
+        // Sample online session
+        let online = OnlineCash(context: ctx)
+        online.id = UUID()
+        online.platform = platform
+        online.startTime = Calendar.current.date(byAdding: .hour, value: -3, to: Date())
+        online.endTime = Date()
+        online.duration = 3.0
+        online.gameType = "No Limit Hold'em"
+        online.blinds = "$0.25/$0.50"
+        online.tableSize = 6
+        online.tables = 2
+        online.balanceBefore = 500.0
+        online.balanceAfter = 562.50
+        online.netProfitLoss = 62.50
+        online.exchangeRateToBase = 1.0
+        online.netProfitLossBase = 62.50
+
+        // Sample live session
+        let live = LiveCash(context: ctx)
+        live.id = UUID()
+        live.startTime = Calendar.current.date(byAdding: .day, value: -1, to: Date())
+        live.endTime = Calendar.current.date(byAdding: .hour, value: -20, to: Date())
+        live.duration = 4.0
+        live.gameType = "No Limit Hold'em"
+        live.blinds = "$1/$2"
+        live.tableSize = 9
+        live.location = "Casino Niagara"
+        live.currency = "CAD"
+        live.exchangeRateToBase = 1.0
+        live.buyIn = 300.0
+        live.cashOut = 480.0
+        live.tips = 20.0
+        live.netProfitLoss = 160.0
+        live.netProfitLossBase = 160.0
+
         do {
-            try viewContext.save()
+            try ctx.save()
         } catch {
-            // Replace this implementation with code to handle the error appropriately.
-            // fatalError() causes the application to generate a crash log and terminate. You should not use this function in a shipping application, although it may be useful during development.
             let nsError = error as NSError
             fatalError("Unresolved error \(nsError), \(nsError.userInfo)")
         }
         return result
     }()
 
-    let container: NSPersistentCloudKitContainer
+    let container: NSPersistentContainer
 
     init(inMemory: Bool = false) {
-        container = NSPersistentCloudKitContainer(name: "project_capital")
+        container = NSPersistentContainer(name: "DataModel")
         if inMemory {
             container.persistentStoreDescriptions.first!.url = URL(fileURLWithPath: "/dev/null")
         }
-        container.loadPersistentStores(completionHandler: { (storeDescription, error) in
+        container.loadPersistentStores { _, error in
             if let error = error as NSError? {
-                // Replace this implementation with code to handle the error appropriately.
-                // fatalError() causes the application to generate a crash log and terminate. You should not use this function in a shipping application, although it may be useful during development.
-
-                /*
-                 Typical reasons for an error here include:
-                 * The parent directory does not exist, cannot be created, or disallows writing.
-                 * The persistent store is not accessible, due to permissions or data protection when the device is locked.
-                 * The device is out of space.
-                 * The store could not be migrated to the current model version.
-                 Check the error message to determine what the actual problem was.
-                 */
                 fatalError("Unresolved error \(error), \(error.userInfo)")
             }
-        })
+        }
         container.viewContext.automaticallyMergesChangesFromParent = true
+        container.viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+    }
+
+    func save() {
+        let ctx = container.viewContext
+        if ctx.hasChanges {
+            do {
+                try ctx.save()
+            } catch {
+                let nsError = error as NSError
+                print("Core Data save error: \(nsError), \(nsError.userInfo)")
+            }
+        }
     }
 }

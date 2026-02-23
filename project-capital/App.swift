@@ -1,21 +1,27 @@
-//
-//  project_capitalApp.swift
-//  project-capital
-//
-//  Created by Shawn Zhou on 2026-02-23.
-//
-
 import SwiftUI
 import CoreData
 
 @main
-struct project_capitalApp: App {
+struct ProjectCapitalApp: App {
     let persistenceController = PersistenceController.shared
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            RootView()
                 .environment(\.managedObjectContext, persistenceController.container.viewContext)
+                .preferredColorScheme(.dark)
+        }
+    }
+}
+
+struct RootView: View {
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+
+    var body: some View {
+        if hasCompletedOnboarding {
+            MainTabView()
+        } else {
+            OnboardingView()
         }
     }
 }
