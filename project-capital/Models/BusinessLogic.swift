@@ -177,8 +177,16 @@ struct StatsResult {
     var totalHands: Int = 0
     var sessionCount: Int = 0
     var winCount: Int = 0
+    var loseCount: Int = 0
     var adjustmentsTotal: Double = 0
     var totalBBWon: Double = 0
+    var totalBuyIn: Double = 0
+    var totalTips: Double = 0
+    var biggestWin: Double = 0
+    var biggestLoss: Double = 0
+    var longestSessionHours: Double = 0
+    var longestWinStreak: Int = 0
+    var longestLoseStreak: Int = 0
 
     var hourlyRate: Double {
         totalHours > 0 ? netResult / totalHours : 0
@@ -186,6 +194,14 @@ struct StatsResult {
 
     var avgResult: Double {
         sessionCount > 0 ? netResult / Double(sessionCount) : 0
+    }
+
+    var avgSessionDuration: Double {
+        sessionCount > 0 ? totalHours / Double(sessionCount) : 0
+    }
+
+    var avgBuyIn: Double {
+        sessionCount > 0 ? totalBuyIn / Double(sessionCount) : 0
     }
 
     var winRate: Double {
@@ -258,21 +274,56 @@ func computeStats(
     }
 
     for session in filteredOnline {
-        result.netResultNoAdj += session.netProfitLossBase
+        let netBase = session.netProfitLossBase
+        result.netResultNoAdj += netBase
         result.totalHours += session.computedDuration
         result.totalHands += session.effectiveHands
         result.sessionCount += 1
-        if session.netProfitLoss > 0 { result.winCount += 1 }
+        if session.netProfitLoss > 0 { result.winCount += 1 } else { result.loseCount += 1 }
         result.totalBBWon += session.bbWon
+        let rate = session.exchangeRateToBase > 0 ? session.exchangeRateToBase : 1.0
+        result.totalBuyIn += session.balanceBefore * rate
+        if netBase > result.biggestWin { result.biggestWin = netBase }
+        if netBase < result.biggestLoss { result.biggestLoss = netBase }
+        if session.computedDuration > result.longestSessionHours { result.longestSessionHours = session.computedDuration }
     }
 
     for session in filteredLive {
-        result.netResultNoAdj += session.netResultBase
+        let netBase = session.netResultBase
+        result.netResultNoAdj += netBase
         result.totalHours += session.computedDuration
         result.totalHands += session.effectiveHands
         result.sessionCount += 1
-        if session.netResult > 0 { result.winCount += 1 }
+        if session.netResult > 0 { result.winCount += 1 } else { result.loseCount += 1 }
         result.totalBBWon += session.bbWon
+        let buyInBase: Double = session.exchangeRateBuyIn > 0
+            ? session.buyIn * session.exchangeRateBuyIn
+            : session.buyIn * (session.exchangeRateToBase > 0 ? session.exchangeRateToBase : 1.0)
+        result.totalBuyIn += buyInBase
+        let tipsRate: Double = session.exchangeRateCashOut > 0
+            ? session.exchangeRateCashOut
+            : (session.exchangeRateToBase > 0 ? session.exchangeRateToBase : 1.0)
+        result.totalTips += session.tips * tipsRate
+        if netBase > result.biggestWin { result.biggestWin = netBase }
+        if netBase < result.biggestLoss { result.biggestLoss = netBase }
+        if session.computedDuration > result.longestSessionHours { result.longestSessionHours = session.computedDuration }
+    }
+
+    // Win/lose streaks from all sessions sorted chronologically
+    struct SR { let date: Date; let isWin: Bool }
+    var combined: [SR] = []
+    for s in filteredOnline { combined.append(SR(date: s.sessionDate, isWin: s.netProfitLoss > 0)) }
+    for s in filteredLive   { combined.append(SR(date: s.sessionDate, isWin: s.netResult > 0)) }
+    combined.sort { $0.date < $1.date }
+    var curWin = 0, curLose = 0
+    for sr in combined {
+        if sr.isWin {
+            curWin += 1; curLose = 0
+            if curWin > result.longestWinStreak { result.longestWinStreak = curWin }
+        } else {
+            curLose += 1; curWin = 0
+            if curLose > result.longestLoseStreak { result.longestLoseStreak = curLose }
+        }
     }
 
     if showAdjustments {

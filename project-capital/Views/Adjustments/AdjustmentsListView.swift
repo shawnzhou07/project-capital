@@ -239,6 +239,8 @@ struct AdjustmentRowView: View {
                     Text(AppFormatter.currencySigned(adjustment.amount, code: adjustment.currency ?? ""))
                         .font(.caption)
                         .foregroundColor(.appSecondary)
+                } else {
+                    Text(" ").font(.caption).foregroundColor(.clear)
                 }
             }
         }

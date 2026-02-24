@@ -40,10 +40,9 @@ struct StatsView: View {
                     netResultHeader
                     dateFilterBar
                     sessionFilterBar
-                    statsGrid
-                    if stats.totalHands > 0 {
-                        bbStatsSection
-                    }
+                    performanceSection
+                    volumeSection
+                    resultsSection
                     platformBreakdown
                 }
                 .padding()
@@ -65,7 +64,6 @@ struct StatsView: View {
                     .foregroundColor(stats.netResult.profitColor)
                     .minimumScaleFactor(0.5)
             }
-
             Toggle(isOn: $includeAdjustments) {
                 Text("Include Adjustments")
                     .font(.caption).foregroundColor(.appSecondary)
@@ -84,9 +82,9 @@ struct StatsView: View {
     var dateFilterBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                DateFilterChip(label: "All Time", isSelected: isDateFilter(.allTime)) { dateFilter = .allTime }
-                DateFilterChip(label: "This Month", isSelected: isDateFilter(.thisMonth)) { dateFilter = .thisMonth }
-                DateFilterChip(label: "This Year", isSelected: isDateFilter(.thisYear)) { dateFilter = .thisYear }
+                DateFilterChip(label: "All Time",    isSelected: isDateFilter(.allTime))   { dateFilter = .allTime }
+                DateFilterChip(label: "This Month",  isSelected: isDateFilter(.thisMonth)) { dateFilter = .thisMonth }
+                DateFilterChip(label: "This Year",   isSelected: isDateFilter(.thisYear))  { dateFilter = .thisYear }
             }
         }
     }
@@ -103,16 +101,14 @@ struct StatsView: View {
     var sessionFilterBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                SessionFilterChip(label: "All", isSelected: isFilter(.all)) { sessionFilter = .all }
-                SessionFilterChip(label: "Live", isSelected: isFilter(.live)) { sessionFilter = .live }
+                SessionFilterChip(label: "All",    isSelected: isFilter(.all))    { sessionFilter = .all }
+                SessionFilterChip(label: "Live",   isSelected: isFilter(.live))   { sessionFilter = .live }
                 SessionFilterChip(label: "Online", isSelected: isFilter(.online)) { sessionFilter = .online }
                 ForEach(Array(platforms)) { platform in
                     SessionFilterChip(
                         label: platform.displayName,
                         isSelected: isFilter(.platform(platform))
-                    ) {
-                        sessionFilter = .platform(platform)
-                    }
+                    ) { sessionFilter = .platform(platform) }
                 }
             }
         }
@@ -126,76 +122,163 @@ struct StatsView: View {
         }
     }
 
-    // MARK: - Stats Grid
+    // MARK: - Performance Section
 
-    var statsGrid: some View {
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-            StatCard(
-                title: "Hourly Rate",
-                value: AppFormatter.hourlyRate(stats.hourlyRate),
-                icon: "clock.fill",
-                color: stats.sessionCount == 0 ? .appSecondary : stats.hourlyRate.profitColor
-            )
-            StatCard(
-                title: "Sessions",
-                value: "\(stats.sessionCount)",
-                icon: "calendar",
-                color: .appGold
-            )
-            StatCard(
-                title: "Hours Played",
-                value: AppFormatter.duration(stats.totalHours),
-                icon: "timer",
-                color: .appGold
-            )
-            StatCard(
-                title: "Hands Played",
-                value: AppFormatter.handsCount(stats.totalHands),
-                icon: "suit.spade.fill",
-                color: .appGold
-            )
-            StatCard(
-                title: "Avg Session",
-                value: AppFormatter.currencySigned(stats.avgResult),
-                icon: "chart.line.uptrend.xyaxis",
-                color: stats.sessionCount == 0 ? .appSecondary : stats.avgResult.profitColor
-            )
-            StatCard(
-                title: "Win Rate",
-                value: AppFormatter.percentage(stats.winRate),
-                icon: "trophy.fill",
-                color: stats.sessionCount == 0 ? .appSecondary : (stats.winRate > 0.5 ? .appProfit : .appLoss)
-            )
-        }
-    }
-
-    // MARK: - BB Stats Section
-
-    var bbStatsSection: some View {
+    var performanceSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Big Blind Tracking")
+            Text("Performance")
                 .font(.headline).foregroundColor(.appGold)
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                 StatCard(
-                    title: "BB Net",
+                    title: "Hourly Rate",
+                    value: AppFormatter.hourlyRate(stats.hourlyRate),
+                    icon: "clock.fill",
+                    color: stats.sessionCount == 0 ? .appSecondary : stats.hourlyRate.profitColor
+                )
+                StatCard(
+                    title: "Avg Net Result",
+                    value: AppFormatter.currencySigned(stats.avgResult, code: baseCurrency),
+                    icon: "chart.line.uptrend.xyaxis",
+                    color: stats.sessionCount == 0 ? .appSecondary : stats.avgResult.profitColor
+                )
+                StatCard(
+                    title: "Net Result (BB)",
                     value: bbSigned(stats.totalBBWon) + " BB",
                     icon: "b.circle.fill",
-                    color: stats.totalBBWon == 0 ? .appSecondary : stats.totalBBWon.profitColor
+                    color: stats.sessionCount == 0 ? .appSecondary : stats.totalBBWon.profitColor
                 )
                 StatCard(
                     title: "BB / Hour",
-                    value: bbSigned(stats.bbPerHour),
-                    icon: "clock.fill",
-                    color: stats.bbPerHour == 0 ? .appSecondary : stats.bbPerHour.profitColor
+                    value: bbSigned(stats.bbPerHour) + " BB/hr",
+                    icon: "speedometer",
+                    color: stats.sessionCount == 0 ? .appSecondary : stats.bbPerHour.profitColor
                 )
                 StatCard(
-                    title: "BB / 100",
+                    title: "BB / 100 Hands",
                     value: bbSigned(stats.bbPer100),
                     icon: "suit.spade.fill",
-                    color: stats.bbPer100 == 0 ? .appSecondary : stats.bbPer100.profitColor
+                    color: stats.totalHands == 0 ? .appSecondary : stats.bbPer100.profitColor
                 )
             }
         }
+    }
+
+    // MARK: - Volume Section
+
+    var volumeSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Volume")
+                .font(.headline).foregroundColor(.appGold)
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                StatCard(
+                    title: "Sessions",
+                    value: "\(stats.sessionCount)",
+                    icon: "calendar",
+                    color: .appGold,
+                    valueColor: .appPrimary
+                )
+                StatCard(
+                    title: "Hours Played",
+                    value: AppFormatter.duration(stats.totalHours),
+                    icon: "timer",
+                    color: .appGold,
+                    valueColor: .appPrimary
+                )
+                StatCard(
+                    title: "Hands Played",
+                    value: AppFormatter.handsCount(stats.totalHands),
+                    icon: "suit.spade.fill",
+                    color: .appGold,
+                    valueColor: .appPrimary
+                )
+                StatCard(
+                    title: "Avg Session",
+                    value: AppFormatter.duration(stats.avgSessionDuration),
+                    icon: "hourglass",
+                    color: .appGold,
+                    valueColor: .appPrimary
+                )
+                StatCard(
+                    title: "Avg Buy In",
+                    value: AppFormatter.currency(stats.avgBuyIn, code: baseCurrency),
+                    icon: "dollarsign.circle.fill",
+                    color: .appGold,
+                    valueColor: .appPrimary
+                )
+                StatCard(
+                    title: "Total Tips",
+                    value: AppFormatter.currency(stats.totalTips, code: baseCurrency),
+                    icon: "heart.fill",
+                    color: .appGold,
+                    valueColor: .appPrimary
+                )
+            }
+        }
+    }
+
+    // MARK: - Results Section
+
+    var resultsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Results")
+                .font(.headline).foregroundColor(.appGold)
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                StatCard(
+                    title: "Win Rate",
+                    value: AppFormatter.percentage(stats.winRate),
+                    icon: "trophy.fill",
+                    color: winRateColor
+                )
+                StatCard(
+                    title: "Winning Sessions",
+                    value: "\(stats.winCount)",
+                    icon: "arrow.up.circle.fill",
+                    color: .appProfit
+                )
+                StatCard(
+                    title: "Losing Sessions",
+                    value: "\(stats.loseCount)",
+                    icon: "arrow.down.circle.fill",
+                    color: .appLoss
+                )
+                StatCard(
+                    title: "Biggest Win",
+                    value: AppFormatter.currencySigned(stats.biggestWin, code: baseCurrency),
+                    icon: "star.fill",
+                    color: stats.sessionCount == 0 ? .appSecondary : .appProfit
+                )
+                StatCard(
+                    title: "Biggest Loss",
+                    value: AppFormatter.currencySigned(stats.biggestLoss, code: baseCurrency),
+                    icon: "exclamationmark.circle.fill",
+                    color: stats.sessionCount == 0 ? .appSecondary : .appLoss
+                )
+                StatCard(
+                    title: "Longest Session",
+                    value: AppFormatter.duration(stats.longestSessionHours),
+                    icon: "moon.stars.fill",
+                    color: stats.sessionCount == 0 ? .appSecondary : .appGold
+                )
+                StatCard(
+                    title: "Win Streak",
+                    value: "\(stats.longestWinStreak)",
+                    icon: "flame.fill",
+                    color: stats.sessionCount == 0 ? .appSecondary : .appProfit
+                )
+                StatCard(
+                    title: "Lose Streak",
+                    value: "\(stats.longestLoseStreak)",
+                    icon: "snowflake",
+                    color: stats.sessionCount == 0 ? .appSecondary : .appLoss
+                )
+            }
+        }
+    }
+
+    var winRateColor: Color {
+        if stats.sessionCount == 0 { return .appSecondary }
+        if stats.winRate == 0.5 { return .appSecondary }
+        return stats.winRate > 0.5 ? .appProfit : .appLoss
     }
 
     func bbSigned(_ value: Double) -> String {
@@ -211,7 +294,6 @@ struct StatsView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Platform Breakdown")
                 .font(.headline).foregroundColor(.appGold)
-
             if platforms.isEmpty {
                 Text("No platforms added yet.")
                     .font(.subheadline).foregroundColor(.appSecondary)
@@ -233,6 +315,7 @@ struct StatCard: View {
     let value: String
     let icon: String
     let color: Color
+    var valueColor: Color? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -241,7 +324,7 @@ struct StatCard: View {
                 Spacer()
             }
             Text(value)
-                .font(.title3).fontWeight(.bold).foregroundColor(color)
+                .font(.title3).fontWeight(.bold).foregroundColor(valueColor ?? color)
                 .minimumScaleFactor(0.6).lineLimit(1)
             Text(title)
                 .font(.caption).foregroundColor(.appSecondary)
