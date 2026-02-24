@@ -30,11 +30,19 @@ struct MainTabView: View {
         UITabBar.appearance().scrollEdgeAppearance = tabAppearance
     }
 
+    @ViewBuilder
+    private var floatingBar: some View {
+        FloatingSessionBar()
+            .environmentObject(sessionCoordinator)
+            .environment(\.managedObjectContext, viewContext)
+    }
+
     var body: some View {
         TabView {
             NavigationStack {
                 SessionsListView()
             }
+            .safeAreaInset(edge: .bottom, spacing: 0) { floatingBar }
             .tabItem {
                 Label("Sessions", systemImage: "rectangle.stack.fill")
             }
@@ -42,6 +50,7 @@ struct MainTabView: View {
             NavigationStack {
                 StatsView()
             }
+            .safeAreaInset(edge: .bottom, spacing: 0) { floatingBar }
             .tabItem {
                 Label("Stats", systemImage: "chart.bar.fill")
             }
@@ -49,6 +58,7 @@ struct MainTabView: View {
             NavigationStack {
                 PlatformsListView()
             }
+            .safeAreaInset(edge: .bottom, spacing: 0) { floatingBar }
             .tabItem {
                 Label("Platforms", systemImage: "building.columns.fill")
             }
@@ -56,16 +66,12 @@ struct MainTabView: View {
             NavigationStack {
                 MoreView()
             }
+            .safeAreaInset(edge: .bottom, spacing: 0) { floatingBar }
             .tabItem {
                 Label("More", systemImage: "ellipsis")
             }
         }
         .environmentObject(sessionCoordinator)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            FloatingSessionBar()
-                .environmentObject(sessionCoordinator)
-                .environment(\.managedObjectContext, viewContext)
-        }
         .fullScreenCover(isPresented: $sessionCoordinator.isFormPresented) {
             SessionEntryContainerView()
                 .environmentObject(sessionCoordinator)

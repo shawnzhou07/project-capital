@@ -32,7 +32,6 @@ struct OnlineSessionDetailView: View {
     @State private var prevEndTime = Date()
     @State private var balanceBefore = ""
     @State private var balanceAfter = ""
-    @State private var exchangeRate = ""
     @State private var handsOverride = ""
     @State private var notes = ""
     @State private var selectedPlatform: Platform? = nil
@@ -44,7 +43,7 @@ struct OnlineSessionDetailView: View {
     var breakTimeMinutes: Double { Double(breakTimeStr) ?? 0 }
     var duration: Double { max(0, endTime.timeIntervalSince(startTime) / 3600.0 - breakTimeMinutes / 60.0) }
     var netPL: Double { (Double(balanceAfter) ?? 0) - (Double(balanceBefore) ?? 0) }
-    var netPLBase: Double { netPL * (Double(exchangeRate) ?? 1.0) }
+    var netPLBase: Double { isSameCurrency ? netPL : netPL * (selectedPlatform?.latestFXConversionRate ?? 1.0) }
     var platformCurrency: String { selectedPlatform?.displayCurrency ?? session.platformCurrency }
     var isSameCurrency: Bool { platformCurrency == baseCurrency }
     var sbDouble: Double { Double(smallBlind) ?? 0 }
@@ -94,6 +93,7 @@ struct OnlineSessionDetailView: View {
                 }
                 .scrollContentBackground(.hidden)
                 .background(Color.appBackground)
+                .selectAllOnFocus()
 
                 verifyBar
             }
@@ -119,7 +119,6 @@ struct OnlineSessionDetailView: View {
 
     private var mainContentWithMoreOnChange: some View {
         mainContentWithOnChange
-            .onChange(of: exchangeRate) { _, _ in autoSave() }
             .onChange(of: handsOverride) { _, _ in autoSave() }
             .onChange(of: notes) { _, _ in autoSave() }
             .onChange(of: selectedPlatform) { _, _ in autoSave() }
@@ -176,32 +175,34 @@ struct OnlineSessionDetailView: View {
 
     var verifyBar: some View {
         Group {
-            if isVerified {
-                HStack(spacing: 6) {
-                    Image(systemName: "checkmark.seal.fill").foregroundColor(.appGold).font(.subheadline)
-                    Text("Verified").font(.subheadline).fontWeight(.medium).foregroundColor(.appGold)
+            if session.endTime != nil {
+                if isVerified {
+                    HStack(spacing: 6) {
+                        Image(systemName: "checkmark.seal.fill").foregroundColor(.appGold).font(.subheadline)
+                        Text("Verified").font(.subheadline).fontWeight(.medium).foregroundColor(.appGold)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(Color.appBackground)
+                } else {
+                    Button {
+                        if canVerify { showVerifyAlert = true }
+                    } label: {
+                        Text("Verify Session")
+                            .font(.headline).fontWeight(.semibold)
+                            .foregroundColor(canVerify ? .black : .appGold)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(canVerify ? Color.appGold : Color.clear)
+                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.appGold, lineWidth: canVerify ? 0 : 1.5))
+                            .cornerRadius(12)
+                            .opacity(canVerify ? 1.0 : 0.5)
+                    }
+                    .disabled(!canVerify)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(Color.appBackground)
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
-                .background(Color.appBackground)
-            } else {
-                Button {
-                    if canVerify { showVerifyAlert = true }
-                } label: {
-                    Text("Verify Session")
-                        .font(.headline).fontWeight(.semibold)
-                        .foregroundColor(canVerify ? .black : .appGold)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(canVerify ? Color.appGold : Color.clear)
-                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.appGold, lineWidth: canVerify ? 0 : 1.5))
-                        .cornerRadius(12)
-                        .opacity(canVerify ? 1.0 : 0.5)
-                }
-                .disabled(!canVerify)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(Color.appBackground)
             }
         }
     }
@@ -252,17 +253,6 @@ struct OnlineSessionDetailView: View {
             }
             .listRowBackground(Color.appSurface)
 
-            if !isSameCurrency {
-                HStack {
-                    Text("Exchange Rate").foregroundColor(.appPrimary)
-                    Spacer()
-                    TextField("1.0000", text: $exchangeRate)
-                        .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
-                        .foregroundColor(.appGold).frame(width: 100)
-                    Text("\(platformCurrency)/\(baseCurrency)").font(.caption).foregroundColor(.appSecondary)
-                }
-                .listRowBackground(Color.appSurface)
-            }
         } header: {
             Text("Platform").foregroundColor(.appGold).textCase(nil)
         }
@@ -347,7 +337,7 @@ struct OnlineSessionDetailView: View {
                     Text("Balance Before").foregroundColor(.appPrimary)
                     Spacer()
                     Text(platformCurrency).font(.caption).foregroundColor(.appSecondary)
-                    TextField("0.00", text: $balanceBefore)
+                    TextField("0", text: $balanceBefore)
                         .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
                         .foregroundColor(.appPrimary).frame(width: 100)
                 }
@@ -361,7 +351,7 @@ struct OnlineSessionDetailView: View {
                     Text("Balance After").foregroundColor(.appPrimary)
                     Spacer()
                     Text(platformCurrency).font(.caption).foregroundColor(.appSecondary)
-                    TextField("0.00", text: $balanceAfter)
+                    TextField("0", text: $balanceAfter)
                         .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
                         .foregroundColor(.appPrimary).frame(width: 100)
                 }
@@ -437,11 +427,22 @@ struct OnlineSessionDetailView: View {
             HStack {
                 Text(label).foregroundColor(.appPrimary)
                 Spacer()
-                Image(systemName: "lock.fill").font(.caption).foregroundColor(.appGold)
-                Text(value).foregroundColor(.appSecondary)
+                Image(systemName: "lock.fill")
+                    .font(.caption)
+                    .foregroundColor(.appGold)
+                    .shadow(color: Color(hex: "#C9B47A"), radius: 6, x: 0, y: 0)
+                Text(value)
+                    .foregroundColor(.appSecondary)
+                    .shadow(color: Color(hex: "#C9B47A"), radius: 6, x: 0, y: 0)
             }
         }
-        .listRowBackground(Color.appSurface)
+        .listRowBackground(
+            Color.appSurface
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.appGold.opacity(0.7), lineWidth: 2.5)
+                )
+        )
     }
 
     // MARK: - Helpers
@@ -482,7 +483,6 @@ struct OnlineSessionDetailView: View {
         prevEndTime = endTime
         balanceBefore = String(format: "%.2f", session.balanceBefore)
         balanceAfter = String(format: "%.2f", session.balanceAfter)
-        exchangeRate = String(format: "%.4f", session.exchangeRateToBase)
         handsOverride = session.handsCount > 0 ? "\(session.handsCount)" : ""
         notes = session.notes ?? ""
         selectedPlatform = session.platform
@@ -509,7 +509,7 @@ struct OnlineSessionDetailView: View {
             session.balanceBefore = Double(balanceBefore) ?? 0
             session.balanceAfter = Double(balanceAfter) ?? 0
         }
-        session.exchangeRateToBase = Double(exchangeRate) ?? 1.0
+        session.exchangeRateToBase = selectedPlatform?.latestFXConversionRate ?? 1.0
         session.netProfitLoss = netPL
         session.netProfitLossBase = netPLBase
         session.handsCount = Int32(handsOverride) ?? 0

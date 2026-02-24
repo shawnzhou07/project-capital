@@ -27,7 +27,6 @@ struct OnlineSessionFormView: View {
     @State private var breakTimeStr = ""
     @State private var balanceBefore = ""
     @State private var balanceAfter = ""
-    @State private var exchangeRate = "1.0000"
     @State private var handsOverride = ""
     @State private var notes = ""
     @State private var showPlatformPicker = false
@@ -47,7 +46,7 @@ struct OnlineSessionFormView: View {
     }
 
     var netPLBase: Double {
-        netPL * (Double(exchangeRate) ?? 1.0)
+        isSameCurrency ? netPL : netPL * (selectedPlatform?.latestFXConversionRate ?? 1.0)
     }
 
     var platformCurrency: String {
@@ -82,10 +81,10 @@ struct OnlineSessionFormView: View {
         }
         .scrollContentBackground(.hidden)
         .background(Color.appBackground)
+        .selectAllOnFocus()
         .onAppear {
             if selectedPlatform == nil, let first = platforms.first {
                 selectedPlatform = first
-                syncExchangeRate()
             }
             prevStartTime = startTime
             prevEndTime = endTime
@@ -121,28 +120,11 @@ struct OnlineSessionFormView: View {
             }
             .listRowBackground(Color.appSurface)
 
-            if !isSameCurrency {
-                HStack {
-                    Text("Exchange Rate")
-                        .foregroundColor(.appPrimary)
-                    Spacer()
-                    TextField("1.0000", text: $exchangeRate)
-                        .keyboardType(.decimalPad)
-                        .multilineTextAlignment(.trailing)
-                        .foregroundColor(.appGold)
-                        .frame(width: 100)
-                    Text("\(platformCurrency)/\(baseCurrency)")
-                        .font(.caption)
-                        .foregroundColor(.appSecondary)
-                }
-                .listRowBackground(Color.appSurface)
-            }
         } header: {
             Text("Platform").foregroundColor(.appGold).textCase(nil)
         }
         .sheet(isPresented: $showPlatformPicker) {
             PlatformPickerSheet(platforms: Array(platforms), selected: $selectedPlatform) {
-                syncExchangeRate()
                 showPlatformPicker = false
             }
         }
@@ -263,7 +245,7 @@ struct OnlineSessionFormView: View {
                 Text(platformCurrency)
                     .font(.caption)
                     .foregroundColor(.appSecondary)
-                TextField("0.00", text: $balanceBefore)
+                TextField("0", text: $balanceBefore)
                     .keyboardType(.decimalPad)
                     .multilineTextAlignment(.trailing)
                     .foregroundColor(.appPrimary)
@@ -278,7 +260,7 @@ struct OnlineSessionFormView: View {
                 Text(platformCurrency)
                     .font(.caption)
                     .foregroundColor(.appSecondary)
-                TextField("0.00", text: $balanceAfter)
+                TextField("0", text: $balanceAfter)
                     .keyboardType(.decimalPad)
                     .multilineTextAlignment(.trailing)
                     .foregroundColor(.appPrimary)
@@ -354,13 +336,6 @@ struct OnlineSessionFormView: View {
         }
     }
 
-    func syncExchangeRate() {
-        guard let platform = selectedPlatform else { return }
-        if platform.displayCurrency == baseCurrency {
-            exchangeRate = "1.0000"
-        }
-    }
-
     func saveSession() {
         guard let platform = selectedPlatform, endTime > startTime else {
             if endTime <= startTime { showTimeAlert = true }
@@ -384,7 +359,7 @@ struct OnlineSessionFormView: View {
         session.balanceBefore = Double(balanceBefore) ?? 0
         session.balanceAfter = Double(balanceAfter) ?? 0
         session.netProfitLoss = netPL
-        session.exchangeRateToBase = Double(exchangeRate) ?? 1.0
+        session.exchangeRateToBase = selectedPlatform?.latestFXConversionRate ?? 1.0
         session.netProfitLossBase = netPLBase
         session.handsCount = Int32(handsOverride) ?? 0
         session.notes = notes.isEmpty ? nil : notes

@@ -147,7 +147,10 @@ extension LiveCash {
     var netResult: Double { cashOut - buyIn }
 
     var netResultBase: Double {
-        let rate = exchangeRateCashOut > 0 ? exchangeRateCashOut : exchangeRateToBase
+        if exchangeRateCashOut > 0 && exchangeRateBuyIn > 0 {
+            return (cashOut * exchangeRateCashOut) - (buyIn * exchangeRateBuyIn)
+        }
+        let rate = exchangeRateToBase > 0 ? exchangeRateToBase : 1.0
         return netResult * rate
     }
 

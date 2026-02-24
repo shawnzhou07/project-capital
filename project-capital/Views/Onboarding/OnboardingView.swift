@@ -6,7 +6,6 @@ struct OnboardingView: View {
     @State private var selectedCurrency = "CAD"
     @State private var selectedExchangeMode = "direct"
     @State private var selectedPlatforms: Set<String> = []
-    @State private var platformBalances: [String: String] = [:]
     @State private var customPlatformName = ""
     @State private var customPlatformCurrency = "USD"
     @State private var showCustomPlatform = false
@@ -23,7 +22,6 @@ struct OnboardingView: View {
             case 1: currencyStep
             case 2: exchangeRateModeStep
             case 3: platformsStep
-            case 4: balancesStep
             default: welcomeStep
             }
         }
@@ -68,7 +66,7 @@ struct OnboardingView: View {
 
     var currencyStep: some View {
         VStack(spacing: 0) {
-            OnboardingHeader(title: "Base Currency", subtitle: "All profits will be reported in this currency. This cannot be changed later.", step: "1 of 4")
+            OnboardingHeader(title: "Base Currency", subtitle: "All profits will be reported in this currency. This cannot be changed later.", step: "1 of 3", backAction: { withAnimation { step = 0 } })
             ScrollView {
                 VStack(spacing: 12) {
                     ForEach(["CAD", "USD", "EUR"], id: \.self) { currency in
@@ -100,7 +98,8 @@ struct OnboardingView: View {
             OnboardingHeader(
                 title: "Exchange Rate Input",
                 subtitle: "How do you prefer to enter exchange rates for foreign currency sessions?",
-                step: "2 of 4"
+                step: "2 of 3",
+                backAction: { withAnimation { step = 1 } }
             )
             ScrollView {
                 VStack(spacing: 12) {
@@ -139,7 +138,7 @@ struct OnboardingView: View {
 
     var platformsStep: some View {
         VStack(spacing: 0) {
-            OnboardingHeader(title: "Your Platforms", subtitle: "Select the online poker platforms you play on. You can add more later.", step: "3 of 4")
+            OnboardingHeader(title: "Your Platforms", subtitle: "Select the online poker platforms you play on. You can add more later.", step: "3 of 3", backAction: { withAnimation { step = 2 } })
             ScrollView {
                 VStack(spacing: 10) {
                     ForEach(PlatformTemplate.predefined) { template in
@@ -176,50 +175,14 @@ struct OnboardingView: View {
                 }
                 .padding()
             }
-            OnboardingNextButton(title: "Continue") {
-                withAnimation { step = 4 }
+            OnboardingNextButton(title: "Start Tracking") {
+                savePlatformsAndComplete()
             }
         }
         .sheet(isPresented: $showCustomPlatform) {
             CustomPlatformSheet(name: $customPlatformName, currency: $customPlatformCurrency) { name, currency in
                 selectedPlatforms.insert("\(name)|\(currency)")
                 showCustomPlatform = false
-            }
-        }
-    }
-
-    // MARK: - Step 4: Opening Balances
-
-    var balancesStep: some View {
-        VStack(spacing: 0) {
-            OnboardingHeader(title: "Opening Balances", subtitle: "Set current balances for your selected platforms.", step: "4 of 4")
-            ScrollView {
-                VStack(spacing: 12) {
-                    ForEach(Array(selectedPlatforms).sorted(), id: \.self) { key in
-                        let parts = key.split(separator: "|")
-                        let name = parts.count > 1 ? String(parts[0]) : key
-                        let curr = parts.count > 1 ? String(parts[1]) : currency(for: key)
-                        BalanceInputRow(
-                            platformName: name,
-                            currency: curr,
-                            balance: Binding(
-                                get: { platformBalances[key] ?? "" },
-                                set: { platformBalances[key] = $0 }
-                            )
-                        )
-                    }
-                    if selectedPlatforms.isEmpty {
-                        Text("No platforms selected. You can add them later from the Platforms tab.")
-                            .font(.subheadline)
-                            .foregroundColor(.appSecondary)
-                            .multilineTextAlignment(.center)
-                            .padding()
-                    }
-                }
-                .padding()
-            }
-            OnboardingNextButton(title: "Start Tracking") {
-                savePlatformsAndComplete()
             }
         }
     }
@@ -245,8 +208,7 @@ struct OnboardingView: View {
             platform.name = name
             platform.currency = curr
             platform.createdAt = Date()
-            let balanceStr = platformBalances[key] ?? "0"
-            platform.currentBalance = Double(balanceStr) ?? 0
+            platform.currentBalance = 0
         }
         do {
             try viewContext.save()
@@ -263,12 +225,23 @@ struct OnboardingHeader: View {
     let title: String
     let subtitle: String
     let step: String
+    var backAction: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(step)
-                .font(.caption)
-                .foregroundColor(.appGold)
+            HStack(spacing: 10) {
+                if let back = backAction {
+                    Button(action: back) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundColor(.appGold)
+                    }
+                }
+                Text(step)
+                    .font(.caption)
+                    .foregroundColor(.appGold)
+                Spacer()
+            }
             Text(title)
                 .font(.title2)
                 .fontWeight(.bold)
@@ -435,44 +408,6 @@ struct PlatformSelectionRow: View {
                     .stroke(isSelected ? Color.appGold : Color.appBorder, lineWidth: isSelected ? 1.5 : 1)
             )
         }
-    }
-}
-
-struct BalanceInputRow: View {
-    let platformName: String
-    let currency: String
-    @Binding var balance: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(platformName)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(.appPrimary)
-                Spacer()
-                Text(currency)
-                    .font(.caption)
-                    .foregroundColor(.appSecondary)
-            }
-            HStack {
-                Text("$")
-                    .foregroundColor(.appSecondary)
-                TextField("0.00", text: $balance)
-                    .keyboardType(.decimalPad)
-                    .foregroundColor(.appPrimary)
-            }
-            .padding(10)
-            .background(Color.appSurface2)
-            .cornerRadius(8)
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color.appBorder, lineWidth: 1)
-            )
-        }
-        .padding()
-        .background(Color.appSurface)
-        .cornerRadius(8)
     }
 }
 

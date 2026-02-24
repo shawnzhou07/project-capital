@@ -51,3 +51,18 @@ extension Double {
         return .appNeutral
     }
 }
+
+import UIKit
+
+extension View {
+    /// Selects all text when a UITextField within this view gains focus.
+    func selectAllOnFocus() -> some View {
+        onReceive(
+            NotificationCenter.default.publisher(for: UITextField.textDidBeginEditingNotification)
+        ) { notification in
+            DispatchQueue.main.async {
+                (notification.object as? UITextField)?.selectAll(nil)
+            }
+        }
+    }
+}

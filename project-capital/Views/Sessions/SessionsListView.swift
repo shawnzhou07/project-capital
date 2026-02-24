@@ -239,54 +239,54 @@ struct SessionsListView: View {
             NavigationLink {
                 OnlineSessionDetailView(session: s)
             } label: {
-                VStack(alignment: .leading, spacing: 3) {
-                    SessionRowView(
-                        date: s.sessionDate,
-                        icon: "desktopcomputer",
-                        title: s.platformName,
-                        subtitle: "\(s.displayGameType) \(s.displayBlinds)",
-                        duration: s.computedDuration,
-                        netResult: s.netProfitLossBase,
-                        currency: baseCurrency,
-                        isActive: s.isActive
-                    )
-                    if !s.isVerified {
-                        UnverifiedBadge()
-                    }
-                }
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(s.isVerified ? Color.appGold : Color.clear, lineWidth: 1.5)
+                SessionRowView(
+                    date: s.sessionDate,
+                    icon: "desktopcomputer",
+                    title: s.platformName,
+                    subtitle: "\(s.displayGameType) \(s.displayBlinds)",
+                    duration: s.computedDuration,
+                    netResult: s.netProfitLossBase,
+                    currency: baseCurrency,
+                    isActive: s.isActive,
+                    isUnverified: !s.isVerified && !s.isActive
                 )
             }
-            .listRowBackground(Color.appSurface)
+            .listRowBackground(
+                ZStack {
+                    Color.appSurface
+                    if s.isVerified {
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.appGold, lineWidth: 1.5)
+                    }
+                }
+            )
             .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
 
         case .live(let s):
             NavigationLink {
                 LiveSessionDetailView(session: s)
             } label: {
-                VStack(alignment: .leading, spacing: 3) {
-                    SessionRowView(
-                        date: s.sessionDate,
-                        icon: "building.columns",
-                        title: s.displayLocation,
-                        subtitle: "\(s.displayGameType) \(s.displayBlinds)",
-                        duration: s.computedDuration,
-                        netResult: s.netProfitLossBase,
-                        currency: baseCurrency,
-                        isActive: s.isActive
-                    )
-                    if !s.isVerified {
-                        UnverifiedBadge()
-                    }
-                }
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(s.isVerified ? Color.appGold : Color.clear, lineWidth: 1.5)
+                SessionRowView(
+                    date: s.sessionDate,
+                    icon: "building.columns",
+                    title: s.displayLocation,
+                    subtitle: "\(s.displayGameType) \(s.displayBlinds)",
+                    duration: s.computedDuration,
+                    netResult: s.netProfitLossBase,
+                    currency: baseCurrency,
+                    isActive: s.isActive,
+                    isUnverified: !s.isVerified && !s.isActive
                 )
             }
-            .listRowBackground(Color.appSurface)
+            .listRowBackground(
+                ZStack {
+                    Color.appSurface
+                    if s.isVerified {
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.appGold, lineWidth: 1.5)
+                    }
+                }
+            )
             .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
         }
     }
@@ -329,21 +329,6 @@ struct SessionsListView: View {
 
 }
 
-// MARK: - Unverified Badge
-
-struct UnverifiedBadge: View {
-    var body: some View {
-        Text("Unverified")
-            .font(.caption2)
-            .fontWeight(.medium)
-            .foregroundColor(Color(hex: "#8A8A8A"))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(Color(hex: "#1A1A1A"))
-            .cornerRadius(10)
-    }
-}
-
 // MARK: - Session Data Types
 
 enum SessionKind {
@@ -368,6 +353,7 @@ struct SessionRowView: View {
     let netResult: Double
     let currency: String
     let isActive: Bool
+    var isUnverified: Bool = false
 
     @State private var elapsed: TimeInterval = 0
     let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
@@ -385,11 +371,18 @@ struct SessionRowView: View {
             .frame(width: 52)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(.appPrimary)
-                    .lineLimit(1)
+                HStack(spacing: 4) {
+                    Text(title)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(.appPrimary)
+                        .lineLimit(1)
+                    if isUnverified {
+                        Image(systemName: "questionmark.circle.fill")
+                            .font(.subheadline)
+                            .foregroundColor(.appSecondary)
+                    }
+                }
                 Text(subtitle)
                     .font(.caption)
                     .foregroundColor(.appSecondary)

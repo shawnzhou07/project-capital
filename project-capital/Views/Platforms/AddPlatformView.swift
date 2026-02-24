@@ -5,10 +5,20 @@ struct AddPlatformView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @Environment(\.dismiss) private var dismiss
 
+    @FetchRequest(
+        sortDescriptors: [NSSortDescriptor(keyPath: \Platform.name, ascending: true)],
+        animation: .default
+    ) private var existingPlatforms: FetchedResults<Platform>
+
     @State private var selectedTab = 0  // 0 = predefined, 1 = custom
     @State private var selectedTemplate: PlatformTemplate? = nil
     @State private var customName = ""
     @State private var customCurrency = "USD"
+
+    var availablePredefined: [PlatformTemplate] {
+        let existingNames = Set(existingPlatforms.compactMap { $0.name })
+        return PlatformTemplate.predefined.filter { !existingNames.contains($0.name) }
+    }
 
     var canSave: Bool {
         if selectedTab == 0 {
@@ -54,7 +64,17 @@ struct AddPlatformView: View {
     var predefinedList: some View {
         ScrollView {
             VStack(spacing: 10) {
-                ForEach(PlatformTemplate.predefined) { template in
+                if availablePredefined.isEmpty {
+                    Text("All predefined platforms have already been added.")
+                        .font(.subheadline)
+                        .foregroundColor(.appSecondary)
+                        .multilineTextAlignment(.center)
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(Color.appSurface)
+                        .cornerRadius(8)
+                }
+                ForEach(availablePredefined) { template in
                     Button {
                         selectedTemplate = template
                     } label: {

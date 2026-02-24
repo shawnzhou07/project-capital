@@ -54,8 +54,8 @@ struct LiveSessionDetailView: View {
 
     // Net result excludes tips
     var netPL: Double { cashOutDouble - buyInDouble }
-    // Net in base uses cashOut rate (spec requirement)
-    var netPLBase: Double { netPL * exchangeRateCashOut }
+    // Net in base: each leg converted at its own rate
+    var netPLBase: Double { (cashOutDouble * exchangeRateCashOut) - (buyInDouble * exchangeRateBuyIn) }
     var buyInBase: Double { buyInDouble * exchangeRateBuyIn }
     var cashOutBase: Double { cashOutDouble * exchangeRateCashOut }
 
@@ -102,6 +102,7 @@ struct LiveSessionDetailView: View {
                 }
                 .scrollContentBackground(.hidden)
                 .background(Color.appBackground)
+                .selectAllOnFocus()
 
                 verifyBar
             }
@@ -183,41 +184,43 @@ struct LiveSessionDetailView: View {
 
     var verifyBar: some View {
         Group {
-            if isVerified {
-                HStack(spacing: 6) {
-                    Image(systemName: "checkmark.seal.fill")
-                        .foregroundColor(.appGold)
-                        .font(.subheadline)
-                    Text("Verified")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.appGold)
+            if session.endTime != nil {
+                if isVerified {
+                    HStack(spacing: 6) {
+                        Image(systemName: "checkmark.seal.fill")
+                            .foregroundColor(.appGold)
+                            .font(.subheadline)
+                        Text("Verified")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.appGold)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(Color.appBackground)
+                } else {
+                    Button {
+                        if canVerify { showVerifyAlert = true }
+                    } label: {
+                        Text("Verify Session")
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(canVerify ? .black : .appGold)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(canVerify ? Color.appGold : Color.clear)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color.appGold, lineWidth: canVerify ? 0 : 1.5)
+                            )
+                            .cornerRadius(12)
+                            .opacity(canVerify ? 1.0 : 0.5)
+                    }
+                    .disabled(!canVerify)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(Color.appBackground)
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
-                .background(Color.appBackground)
-            } else {
-                Button {
-                    if canVerify { showVerifyAlert = true }
-                } label: {
-                    Text("Verify Session")
-                        .font(.headline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(canVerify ? .black : .appGold)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(canVerify ? Color.appGold : Color.clear)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color.appGold, lineWidth: canVerify ? 0 : 1.5)
-                        )
-                        .cornerRadius(12)
-                        .opacity(canVerify ? 1.0 : 0.5)
-                }
-                .disabled(!canVerify)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(Color.appBackground)
             }
         }
     }
@@ -364,7 +367,7 @@ struct LiveSessionDetailView: View {
                     Text("Buy In").foregroundColor(.appPrimary)
                     Spacer()
                     Text(currency).font(.caption).foregroundColor(.appSecondary)
-                    TextField("0.00", text: $buyIn)
+                    TextField("0", text: $buyIn)
                         .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
                         .foregroundColor(.appPrimary).frame(width: 100)
                 }
@@ -378,7 +381,7 @@ struct LiveSessionDetailView: View {
                     Text("Cash Out").foregroundColor(.appPrimary)
                     Spacer()
                     Text(currency).font(.caption).foregroundColor(.appSecondary)
-                    TextField("0.00", text: $cashOut)
+                    TextField("0", text: $cashOut)
                         .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
                         .foregroundColor(.appPrimary).frame(width: 100)
                 }
@@ -389,7 +392,7 @@ struct LiveSessionDetailView: View {
                 Text("Tips").foregroundColor(.appPrimary)
                 Spacer()
                 Text(currency).font(.caption).foregroundColor(.appSecondary)
-                TextField("0.00", text: $tips)
+                TextField("0", text: $tips)
                     .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
                     .foregroundColor(.appPrimary).frame(width: 100)
             }
@@ -460,7 +463,7 @@ struct LiveSessionDetailView: View {
                 HStack {
                     Text("Amount (\(currency))").foregroundColor(.appPrimary)
                     Spacer()
-                    TextField("0.00", text: $buyIn).keyboardType(.decimalPad)
+                    TextField("0", text: $buyIn).keyboardType(.decimalPad)
                         .multilineTextAlignment(.trailing).foregroundColor(.white).frame(width: 100)
                         .disabled(isVerified)
                 }
@@ -469,7 +472,7 @@ struct LiveSessionDetailView: View {
                 HStack {
                     Text("Equivalent (\(baseCurrency))").foregroundColor(.appPrimary)
                     Spacer()
-                    TextField("0.00", text: $buyInBaseStr).keyboardType(.decimalPad)
+                    TextField("0", text: $buyInBaseStr).keyboardType(.decimalPad)
                         .multilineTextAlignment(.trailing).foregroundColor(.white).frame(width: 100)
                 }
                 .listRowBackground(Color.appSurface)
@@ -487,7 +490,7 @@ struct LiveSessionDetailView: View {
                 HStack {
                     Text("Amount (\(currency))").foregroundColor(.appPrimary)
                     Spacer()
-                    TextField("0.00", text: $cashOut).keyboardType(.decimalPad)
+                    TextField("0", text: $cashOut).keyboardType(.decimalPad)
                         .multilineTextAlignment(.trailing).foregroundColor(.white).frame(width: 100)
                         .disabled(isVerified)
                 }
@@ -496,7 +499,7 @@ struct LiveSessionDetailView: View {
                 HStack {
                     Text("Equivalent (\(baseCurrency))").foregroundColor(.appPrimary)
                     Spacer()
-                    TextField("0.00", text: $cashOutBaseStr).keyboardType(.decimalPad)
+                    TextField("0", text: $cashOutBaseStr).keyboardType(.decimalPad)
                         .multilineTextAlignment(.trailing).foregroundColor(.white).frame(width: 100)
                 }
                 .listRowBackground(Color.appSurface)
@@ -567,11 +570,22 @@ struct LiveSessionDetailView: View {
             HStack {
                 Text(label).foregroundColor(.appPrimary)
                 Spacer()
-                Image(systemName: "lock.fill").font(.caption).foregroundColor(.appGold)
-                Text(value).foregroundColor(.appSecondary)
+                Image(systemName: "lock.fill")
+                    .font(.caption)
+                    .foregroundColor(.appGold)
+                    .shadow(color: Color(hex: "#C9B47A"), radius: 6, x: 0, y: 0)
+                Text(value)
+                    .foregroundColor(.appSecondary)
+                    .shadow(color: Color(hex: "#C9B47A"), radius: 6, x: 0, y: 0)
             }
         }
-        .listRowBackground(Color.appSurface)
+        .listRowBackground(
+            Color.appSurface
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.appGold.opacity(0.7), lineWidth: 2.5)
+                )
+        )
     }
 
     // MARK: - Helpers

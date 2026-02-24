@@ -112,6 +112,8 @@ struct PlatformRowView: View {
     let platform: Platform
     let baseCurrency: String
 
+    var isSameCurrency: Bool { platform.displayCurrency == baseCurrency }
+
     var body: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
@@ -125,13 +127,20 @@ struct PlatformRowView: View {
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 4) {
-                Text(AppFormatter.currency(platform.currentBalance, code: platform.displayCurrency))
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(.appPrimary)
-                Text(AppFormatter.currencySigned(platform.netResult) + " \(baseCurrency)")
-                    .font(.caption)
-                    .foregroundColor(platform.netResult.profitColor)
+                if !isSameCurrency {
+                    Text(AppFormatter.currency(platform.currentBalance, code: platform.displayCurrency))
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(.appPrimary)
+                    Text(AppFormatter.currencySigned(platform.netResult) + " \(baseCurrency)")
+                        .font(.caption)
+                        .foregroundColor(platform.netResult.profitColor)
+                } else {
+                    Text(AppFormatter.currencySigned(platform.netResult) + " \(baseCurrency)")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(platform.netResult.profitColor)
+                }
             }
         }
         .padding(.vertical, 6)

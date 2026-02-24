@@ -70,6 +70,7 @@ struct LiveSessionFormView: View {
         }
         .scrollContentBackground(.hidden)
         .background(Color.appBackground)
+        .selectAllOnFocus()
         .onAppear {
             currency = baseCurrency
             prevStartTime = startTime
@@ -355,7 +356,10 @@ struct LiveSessionFormView: View {
         session.id = UUID()
         session.location = location
         session.currency = currency
-        session.exchangeRateToBase = Double(exchangeRate) ?? 1.0
+        let rate = Double(exchangeRate) ?? 1.0
+        session.exchangeRateToBase = rate
+        session.exchangeRateBuyIn = rate
+        session.exchangeRateCashOut = rate
         session.gameType = gameType
         session.smallBlind = sbDouble
         session.bigBlind = bbDouble
