@@ -9,7 +9,6 @@ struct AddPlatformView: View {
     @State private var selectedTemplate: PlatformTemplate? = nil
     @State private var customName = ""
     @State private var customCurrency = "USD"
-    @State private var openingBalance = ""
 
     var canSave: Bool {
         if selectedTab == 0 {
@@ -38,7 +37,6 @@ struct AddPlatformView: View {
 
                     Spacer()
 
-                    balanceInput
                     saveButton
                 }
             }
@@ -101,7 +99,7 @@ struct AddPlatformView: View {
                 .listRowBackground(Color.appSurface)
 
                 Picker("Currency", selection: $customCurrency) {
-                    ForEach(["CAD", "USD", "EUR", "GBP"], id: \.self) { Text($0).tag($0) }
+                    ForEach(supportedCurrencies, id: \.self) { Text($0).tag($0) }
                 }
                 .foregroundColor(.appPrimary)
                 .tint(.appGold)
@@ -112,30 +110,6 @@ struct AddPlatformView: View {
         }
         .scrollContentBackground(.hidden)
         .background(Color.appBackground)
-    }
-
-    var balanceInput: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Opening Balance")
-                .font(.subheadline)
-                .foregroundColor(.appSecondary)
-            HStack {
-                Text("$")
-                    .foregroundColor(.appSecondary)
-                TextField("0.00", text: $openingBalance)
-                    .keyboardType(.decimalPad)
-                    .foregroundColor(.appPrimary)
-                Spacer()
-                Text(selectedTab == 0 ? (selectedTemplate?.currency ?? "USD") : customCurrency)
-                    .font(.caption)
-                    .foregroundColor(.appSecondary)
-            }
-            .padding()
-            .background(Color.appSurface)
-            .cornerRadius(8)
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.appBorder, lineWidth: 1))
-        }
-        .padding()
     }
 
     var saveButton: some View {
@@ -158,6 +132,7 @@ struct AddPlatformView: View {
         let platform = Platform(context: viewContext)
         platform.id = UUID()
         platform.createdAt = Date()
+        platform.currentBalance = 0
         if selectedTab == 0, let template = selectedTemplate {
             platform.name = template.name
             platform.currency = template.currency
@@ -165,7 +140,6 @@ struct AddPlatformView: View {
             platform.name = customName
             platform.currency = customCurrency
         }
-        platform.currentBalance = Double(openingBalance) ?? 0
 
         do {
             try viewContext.save()

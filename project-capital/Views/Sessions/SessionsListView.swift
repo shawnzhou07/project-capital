@@ -52,9 +52,6 @@ struct SessionsListView: View {
     @State private var filterType: FilterType = .all
     @State private var selectedPlatformFilter: Platform? = nil
     @State private var selectedGameTypeFilter: String? = nil
-    @State private var deleteOnlineSession: OnlineCash? = nil
-    @State private var deleteLiveSession: LiveCash? = nil
-    @State private var showDeleteAlert = false
     @State private var navigateToUnverifiedOnline: OnlineCash? = nil
     @State private var navigateToUnverifiedLive: LiveCash? = nil
 
@@ -135,7 +132,7 @@ struct SessionsListView: View {
             }
         }
         .navigationTitle("Sessions")
-        .navigationBarTitleDisplayMode(.large)
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Menu {
@@ -162,17 +159,6 @@ struct SessionsListView: View {
             }
         } message: {
             Text("You have an unverified session. Please verify your previous session before starting a new one.")
-        }
-        .alert("Delete Session?", isPresented: $showDeleteAlert) {
-            Button("Delete", role: .destructive) {
-                performDelete()
-            }
-            Button("Cancel", role: .cancel) {
-                deleteOnlineSession = nil
-                deleteLiveSession = nil
-            }
-        } message: {
-            Text("This cannot be undone.")
         }
         .navigationDestination(item: $navigateToUnverifiedOnline) { session in
             OnlineSessionDetailView(session: session)
@@ -230,17 +216,6 @@ struct SessionsListView: View {
                     Section {
                         ForEach(group.sessions) { item in
                             sessionRow(item)
-                                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                    Button(role: .destructive) {
-                                        switch item.kind {
-                                        case .online(let s): deleteOnlineSession = s
-                                        case .live(let s): deleteLiveSession = s
-                                        }
-                                        showDeleteAlert = true
-                                    } label: {
-                                        Label("Delete", systemImage: "trash")
-                                    }
-                                }
                         }
                     } header: {
                         Text(group.key)
@@ -352,17 +327,6 @@ struct SessionsListView: View {
         }
     }
 
-    func performDelete() {
-        if let s = deleteOnlineSession {
-            viewContext.delete(s)
-            deleteOnlineSession = nil
-        }
-        if let s = deleteLiveSession {
-            viewContext.delete(s)
-            deleteLiveSession = nil
-        }
-        do { try viewContext.save() } catch { print("Delete error: \(error)") }
-    }
 }
 
 // MARK: - Unverified Badge

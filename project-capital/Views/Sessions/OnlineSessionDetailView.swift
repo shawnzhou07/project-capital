@@ -15,14 +15,21 @@ struct OnlineSessionDetailView: View {
 
     @State private var showDeleteAlert = false
     @State private var showVerifyAlert = false
+    @State private var showTimeAlert = false
     @Environment(\.dismiss) private var dismiss
 
     @State private var gameType = ""
-    @State private var blinds = ""
+    @State private var smallBlind = ""
+    @State private var bigBlind = ""
+    @State private var straddle = ""
+    @State private var ante = ""
+    @State private var breakTimeStr = ""
     @State private var tableSize = 6
     @State private var tables = 1
     @State private var startTime = Date()
     @State private var endTime = Date()
+    @State private var prevStartTime = Date()
+    @State private var prevEndTime = Date()
     @State private var balanceBefore = ""
     @State private var balanceAfter = ""
     @State private var exchangeRate = ""
@@ -34,11 +41,14 @@ struct OnlineSessionDetailView: View {
     @State private var elapsed: TimeInterval = 0
     let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
-    var duration: Double { endTime.timeIntervalSince(startTime) / 3600.0 }
+    var breakTimeMinutes: Double { Double(breakTimeStr) ?? 0 }
+    var duration: Double { max(0, endTime.timeIntervalSince(startTime) / 3600.0 - breakTimeMinutes / 60.0) }
     var netPL: Double { (Double(balanceAfter) ?? 0) - (Double(balanceBefore) ?? 0) }
     var netPLBase: Double { netPL * (Double(exchangeRate) ?? 1.0) }
     var platformCurrency: String { selectedPlatform?.displayCurrency ?? session.platformCurrency }
     var isSameCurrency: Bool { platformCurrency == baseCurrency }
+    var sbDouble: Double { Double(smallBlind) ?? 0 }
+    var bbDouble: Double { Double(bigBlind) ?? 0 }
     var estimatedHands: Int {
         let s = UserSettings.shared
         return Int(duration * Double(s.handsPerHourOnline) * Double(tables))
@@ -51,13 +61,16 @@ struct OnlineSessionDetailView: View {
     var canVerify: Bool {
         selectedPlatform != nil &&
         !gameType.isEmpty &&
-        !blinds.trimmingCharacters(in: .whitespaces).isEmpty
+        sbDouble > 0 && bbDouble > 0
     }
 
     var body: some View {
+        mainContentWithAlerts
+    }
+
+    private var mainZStack: some View {
         ZStack {
             Color.appBackground.ignoresSafeArea()
-            // Verified gold border overlay
             if isVerified {
                 RoundedRectangle(cornerRadius: 0)
                     .stroke(Color.appGold.opacity(0.4), lineWidth: 1)
@@ -85,45 +98,78 @@ struct OnlineSessionDetailView: View {
                 verifyBar
             }
         }
-        .navigationTitle("Online Session")
-        .navigationBarTitleDisplayMode(.inline)
-        .onAppear { loadFromSession() }
-        .onChange(of: gameType) { _, _ in autoSave() }
-        .onChange(of: blinds) { _, _ in autoSave() }
-        .onChange(of: tableSize) { _, _ in autoSave() }
-        .onChange(of: tables) { _, _ in autoSave() }
-        .onChange(of: startTime) { _, _ in autoSave() }
-        .onChange(of: endTime) { _, _ in autoSave() }
-        .onChange(of: balanceBefore) { _, _ in autoSave() }
-        .onChange(of: balanceAfter) { _, _ in autoSave() }
-        .onChange(of: exchangeRate) { _, _ in autoSave() }
-        .onChange(of: handsOverride) { _, _ in autoSave() }
-        .onChange(of: notes) { _, _ in autoSave() }
-        .onChange(of: selectedPlatform) { _, _ in autoSave() }
-        .alert("Delete Session?", isPresented: $showDeleteAlert) {
-            Button("Delete", role: .destructive) {
-                viewContext.delete(session)
-                try? viewContext.save()
-                dismiss()
+    }
+
+    private var mainContentWithOnChange: some View {
+        mainZStack
+            .navigationTitle("Online Session")
+            .navigationBarTitleDisplayMode(.inline)
+            .onAppear { loadFromSession() }
+            .onChange(of: gameType) { _, _ in autoSave() }
+            .onChange(of: smallBlind) { _, _ in autoSave() }
+            .onChange(of: bigBlind) { _, _ in autoSave() }
+            .onChange(of: straddle) { _, _ in autoSave() }
+            .onChange(of: ante) { _, _ in autoSave() }
+            .onChange(of: breakTimeStr) { _, _ in autoSave() }
+            .onChange(of: tableSize) { _, _ in autoSave() }
+            .onChange(of: tables) { _, _ in autoSave() }
+            .onChange(of: balanceBefore) { _, _ in autoSave() }
+            .onChange(of: balanceAfter) { _, _ in autoSave() }
+    }
+
+    private var mainContentWithMoreOnChange: some View {
+        mainContentWithOnChange
+            .onChange(of: exchangeRate) { _, _ in autoSave() }
+            .onChange(of: handsOverride) { _, _ in autoSave() }
+            .onChange(of: notes) { _, _ in autoSave() }
+            .onChange(of: selectedPlatform) { _, _ in autoSave() }
+            .onChange(of: startTime) { oldVal, newVal in
+                if oldVal.timeIntervalSince(newVal) > 20 * 3600 {
+                    startTime = Calendar.current.date(byAdding: .day, value: 1, to: newVal) ?? newVal
+                    return
+                }
+                if endTime <= startTime { showTimeAlert = true; startTime = prevStartTime }
+                else { prevStartTime = startTime; autoSave() }
             }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This cannot be undone.")
-        }
-        .alert("Verify Session?", isPresented: $showVerifyAlert) {
-            Button("Verify") {
-                verifySession()
+            .onChange(of: endTime) { oldVal, newVal in
+                if oldVal.timeIntervalSince(newVal) > 20 * 3600 {
+                    endTime = Calendar.current.date(byAdding: .day, value: 1, to: newVal) ?? newVal
+                    return
+                }
+                if endTime <= startTime { showTimeAlert = true; endTime = prevEndTime }
+                else { prevEndTime = endTime; autoSave() }
             }
-            .foregroundStyle(Color.appGold)
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Verify this session? Balance Before and Balance After will be permanently locked and cannot be changed.")
-        }
-        .sheet(isPresented: $showPlatformPicker) {
-            PlatformPickerSheet(platforms: Array(platforms), selected: $selectedPlatform) {
-                showPlatformPicker = false
+    }
+
+    private var mainContentWithAlerts: some View {
+        mainContentWithMoreOnChange
+            .alert("Invalid Time Range", isPresented: $showTimeAlert) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("End time must be after start time.")
             }
-        }
+            .alert("Delete Session?", isPresented: $showDeleteAlert) {
+                Button("Delete", role: .destructive) {
+                    viewContext.delete(session)
+                    try? viewContext.save()
+                    dismiss()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This cannot be undone.")
+            }
+            .alert("Verify Session?", isPresented: $showVerifyAlert) {
+                Button("Verify") { verifySession() }
+                    .foregroundStyle(Color.appGold)
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Verify this session? Balance Before and Balance After will be permanently locked and cannot be changed.")
+            }
+            .sheet(isPresented: $showPlatformPicker) {
+                PlatformPickerSheet(platforms: Array(platforms), selected: $selectedPlatform) {
+                    showPlatformPicker = false
+                }
+            }
     }
 
     // MARK: - Bottom Bar
@@ -132,13 +178,8 @@ struct OnlineSessionDetailView: View {
         Group {
             if isVerified {
                 HStack(spacing: 6) {
-                    Image(systemName: "checkmark.seal.fill")
-                        .foregroundColor(.appGold)
-                        .font(.subheadline)
-                    Text("Verified")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.appGold)
+                    Image(systemName: "checkmark.seal.fill").foregroundColor(.appGold).font(.subheadline)
+                    Text("Verified").font(.subheadline).fontWeight(.medium).foregroundColor(.appGold)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 16)
@@ -148,16 +189,12 @@ struct OnlineSessionDetailView: View {
                     if canVerify { showVerifyAlert = true }
                 } label: {
                     Text("Verify Session")
-                        .font(.headline)
-                        .fontWeight(.semibold)
+                        .font(.headline).fontWeight(.semibold)
                         .foregroundColor(canVerify ? .black : .appGold)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
                         .background(canVerify ? Color.appGold : Color.clear)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color.appGold, lineWidth: canVerify ? 0 : 1.5)
-                        )
+                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.appGold, lineWidth: canVerify ? 0 : 1.5))
                         .cornerRadius(12)
                         .opacity(canVerify ? 1.0 : 0.5)
                 }
@@ -181,8 +218,7 @@ struct OnlineSessionDetailView: View {
                     Label(AppFormatter.duration(session.computedDuration), systemImage: "clock")
                     Label(AppFormatter.handsCount(session.effectiveHands) + " hands", systemImage: "suit.spade")
                 }
-                .font(.subheadline)
-                .foregroundColor(.appSecondary)
+                .font(.subheadline).foregroundColor(.appSecondary)
                 if session.isActive {
                     HStack {
                         Circle().fill(Color.appProfit).frame(width: 8, height: 8)
@@ -221,10 +257,8 @@ struct OnlineSessionDetailView: View {
                     Text("Exchange Rate").foregroundColor(.appPrimary)
                     Spacer()
                     TextField("1.0000", text: $exchangeRate)
-                        .keyboardType(.decimalPad)
-                        .multilineTextAlignment(.trailing)
-                        .foregroundColor(.appGold)
-                        .frame(width: 100)
+                        .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
+                        .foregroundColor(.appGold).frame(width: 100)
                     Text("\(platformCurrency)/\(baseCurrency)").font(.caption).foregroundColor(.appSecondary)
                 }
                 .listRowBackground(Color.appSurface)
@@ -244,24 +278,32 @@ struct OnlineSessionDetailView: View {
             .foregroundColor(.appPrimary)
             .listRowBackground(Color.appSurface)
 
-            HStack {
-                Text("Blinds").foregroundColor(.appPrimary)
-                Spacer()
-                TextField("$1/$2", text: $blinds)
-                    .multilineTextAlignment(.trailing)
-                    .foregroundColor(.appGold)
+            HStack(spacing: 12) {
+                blindField(label: "SB", text: $smallBlind)
+                blindField(label: "BB", text: $bigBlind)
+                blindField(label: "Straddle", text: $straddle)
+                blindField(label: "Ante", text: $ante)
             }
             .listRowBackground(Color.appSurface)
 
             Stepper("Table Size: \(tableSize)", value: $tableSize, in: 2...10)
-                .foregroundColor(.appPrimary)
-                .listRowBackground(Color.appSurface)
+                .foregroundColor(.appPrimary).listRowBackground(Color.appSurface)
 
             Stepper("Tables: \(tables)", value: $tables, in: 1...10)
-                .foregroundColor(.appPrimary)
-                .listRowBackground(Color.appSurface)
+                .foregroundColor(.appPrimary).listRowBackground(Color.appSurface)
         } header: {
             Text("Game Details").foregroundColor(.appGold).textCase(nil)
+        }
+    }
+
+    @ViewBuilder
+    func blindField(label: String, text: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label).font(.caption2).foregroundColor(.appSecondary)
+            TextField("0", text: text)
+                .keyboardType(.decimalPad).foregroundColor(.appGold)
+                .multilineTextAlignment(.center).frame(maxWidth: .infinity)
+                .padding(.vertical, 6).background(Color.appSurface2).cornerRadius(6)
         }
     }
 
@@ -269,16 +311,24 @@ struct OnlineSessionDetailView: View {
 
     var timingSection: some View {
         Section {
-            DatePicker("Start Time", selection: $startTime)
+            DatePicker("Start", selection: $startTime, displayedComponents: [.date, .hourAndMinute])
                 .foregroundColor(.appPrimary).tint(.appGold)
                 .listRowBackground(Color.appSurface)
-            DatePicker("End Time", selection: $endTime)
+            DatePicker("End", selection: $endTime, displayedComponents: [.date, .hourAndMinute])
                 .foregroundColor(.appPrimary).tint(.appGold)
                 .listRowBackground(Color.appSurface)
             HStack {
+                Text("Break (min)").foregroundColor(.appPrimary)
+                Spacer()
+                TextField("0", text: $breakTimeStr)
+                    .keyboardType(.numberPad).multilineTextAlignment(.trailing)
+                    .foregroundColor(.appGold).frame(width: 80)
+            }
+            .listRowBackground(Color.appSurface)
+            HStack {
                 Text("Duration").foregroundColor(.appPrimary)
                 Spacer()
-                Text(AppFormatter.duration(max(0, duration))).foregroundColor(.appSecondary)
+                Text(AppFormatter.duration(duration)).foregroundColor(.appSecondary)
             }
             .listRowBackground(Color.appSurface)
         } header: {
@@ -290,7 +340,6 @@ struct OnlineSessionDetailView: View {
 
     var balanceSection: some View {
         Section {
-            // Balance Before — LOCKED when verified
             if isVerified {
                 lockedRow(label: "Balance Before", value: "\(platformCurrency) \(String(format: "%.2f", session.balanceBefore))")
             } else {
@@ -299,15 +348,12 @@ struct OnlineSessionDetailView: View {
                     Spacer()
                     Text(platformCurrency).font(.caption).foregroundColor(.appSecondary)
                     TextField("0.00", text: $balanceBefore)
-                        .keyboardType(.decimalPad)
-                        .multilineTextAlignment(.trailing)
-                        .foregroundColor(.appPrimary)
-                        .frame(width: 100)
+                        .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
+                        .foregroundColor(.appPrimary).frame(width: 100)
                 }
                 .listRowBackground(Color.appSurface)
             }
 
-            // Balance After — LOCKED when verified
             if isVerified {
                 lockedRow(label: "Balance After", value: "\(platformCurrency) \(String(format: "%.2f", session.balanceAfter))")
             } else {
@@ -316,10 +362,8 @@ struct OnlineSessionDetailView: View {
                     Spacer()
                     Text(platformCurrency).font(.caption).foregroundColor(.appSecondary)
                     TextField("0.00", text: $balanceAfter)
-                        .keyboardType(.decimalPad)
-                        .multilineTextAlignment(.trailing)
-                        .foregroundColor(.appPrimary)
-                        .frame(width: 100)
+                        .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
+                        .foregroundColor(.appPrimary).frame(width: 100)
                 }
                 .listRowBackground(Color.appSurface)
             }
@@ -350,10 +394,8 @@ struct OnlineSessionDetailView: View {
                 Text("Hands Played").foregroundColor(.appPrimary)
                 Spacer()
                 TextField("Auto (\(estimatedHands) est.)", text: $handsOverride)
-                    .keyboardType(.numberPad)
-                    .multilineTextAlignment(.trailing)
-                    .foregroundColor(.appGold)
-                    .frame(width: 140)
+                    .keyboardType(.numberPad).multilineTextAlignment(.trailing)
+                    .foregroundColor(.appGold).frame(width: 140)
             }
             .listRowBackground(Color.appSurface)
         } header: {
@@ -366,10 +408,8 @@ struct OnlineSessionDetailView: View {
     var notesSection: some View {
         Section {
             TextEditor(text: $notes)
-                .frame(minHeight: 80)
-                .foregroundColor(.appPrimary)
-                .scrollContentBackground(.hidden)
-                .background(Color.appSurface)
+                .frame(minHeight: 80).foregroundColor(.appPrimary)
+                .scrollContentBackground(.hidden).background(Color.appSurface)
                 .listRowBackground(Color.appSurface)
         } header: {
             Text("Notes").foregroundColor(.appGold).textCase(nil)
@@ -383,9 +423,7 @@ struct OnlineSessionDetailView: View {
             Button(role: .destructive) {
                 showDeleteAlert = true
             } label: {
-                Text("Delete Session")
-                    .frame(maxWidth: .infinity)
-                    .foregroundColor(.appLoss)
+                Text("Delete Session").frame(maxWidth: .infinity).foregroundColor(.appLoss)
             }
             .listRowBackground(Color.appSurface)
         }
@@ -395,15 +433,11 @@ struct OnlineSessionDetailView: View {
 
     @ViewBuilder
     func lockedRow(label: String, value: String) -> some View {
-        Button {
-            triggerLockHaptic()
-        } label: {
+        Button { triggerLockHaptic() } label: {
             HStack {
                 Text(label).foregroundColor(.appPrimary)
                 Spacer()
-                Image(systemName: "lock.fill")
-                    .font(.caption)
-                    .foregroundColor(.appGold)
+                Image(systemName: "lock.fill").font(.caption).foregroundColor(.appGold)
                 Text(value).foregroundColor(.appSecondary)
             }
         }
@@ -426,11 +460,26 @@ struct OnlineSessionDetailView: View {
         guard !loaded else { return }
         loaded = true
         gameType = session.gameType ?? "No Limit Hold'em"
-        blinds = session.blinds ?? ""
+
+        if session.smallBlind > 0 || session.bigBlind > 0 {
+            smallBlind = AppFormatter.blindValue(session.smallBlind)
+            bigBlind = AppFormatter.blindValue(session.bigBlind)
+            straddle = session.straddle > 0 ? AppFormatter.blindValue(session.straddle) : ""
+            ante = session.ante > 0 ? AppFormatter.blindValue(session.ante) : ""
+        } else if let blindsStr = session.blinds, !blindsStr.isEmpty {
+            let parts = blindsStr.split(separator: "/")
+            if parts.count >= 2 {
+                smallBlind = String(parts[0]).trimmingCharacters(in: .whitespaces)
+                bigBlind = String(parts[1]).trimmingCharacters(in: .whitespaces)
+            }
+        }
+        breakTimeStr = session.breakTime > 0 ? String(Int(session.breakTime)) : ""
         tableSize = Int(session.tableSize)
         tables = Int(session.tables)
         startTime = session.startTime ?? Date()
         endTime = session.endTime ?? Date()
+        prevStartTime = startTime
+        prevEndTime = endTime
         balanceBefore = String(format: "%.2f", session.balanceBefore)
         balanceAfter = String(format: "%.2f", session.balanceAfter)
         exchangeRate = String(format: "%.4f", session.exchangeRateToBase)
@@ -445,12 +494,17 @@ struct OnlineSessionDetailView: View {
     func autoSave() {
         guard loaded else { return }
         session.gameType = gameType
-        session.blinds = blinds
+        session.smallBlind = sbDouble
+        session.bigBlind = bbDouble
+        session.straddle = Double(straddle) ?? 0
+        session.ante = Double(ante) ?? 0
+        session.blinds = "\(AppFormatter.blindValue(sbDouble))/\(AppFormatter.blindValue(bbDouble))"
         session.tableSize = Int16(tableSize)
         session.tables = Int16(tables)
+        session.breakTime = breakTimeMinutes
         session.startTime = startTime
         session.endTime = endTime
-        session.duration = max(0, duration)
+        session.duration = duration
         if !isVerified {
             session.balanceBefore = Double(balanceBefore) ?? 0
             session.balanceAfter = Double(balanceAfter) ?? 0

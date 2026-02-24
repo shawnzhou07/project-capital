@@ -64,15 +64,14 @@ struct PlatformTemplate: Identifiable {
 extension PlatformTemplate {
     static let predefined: [PlatformTemplate] = [
         PlatformTemplate(name: "PokerStars Ontario", currency: "CAD"),
+        PlatformTemplate(name: "GGPoker Ontario", currency: "CAD"),
         PlatformTemplate(name: "ClubWPT Gold", currency: "USD"),
+        PlatformTemplate(name: "PokerStars", currency: "USD"),
         PlatformTemplate(name: "GGPoker", currency: "USD"),
-        PlatformTemplate(name: "888poker Canada", currency: "CAD"),
-        PlatformTemplate(name: "PartyPoker", currency: "USD"),
-        PlatformTemplate(name: "PokerStars Global", currency: "USD"),
     ]
 }
 
-let supportedCurrencies = ["CAD", "USD", "EUR", "GBP", "AUD", "MXN", "BTC", "ETH"]
+let supportedCurrencies = ["CAD", "USD", "EUR"]
 
 let gameTypes = [
     "No Limit Hold'em",

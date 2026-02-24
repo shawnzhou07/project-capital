@@ -81,4 +81,16 @@ enum AppFormatter {
         }
         return "\(count)"
     }
+
+    // Format a blind value: show as integer if whole number, else 2 decimal places
+    static func blindValue(_ value: Double) -> String {
+        if value == value.rounded() && value >= 0 {
+            return String(Int(value))
+        }
+        return String(format: "%.2f", value)
+    }
+
+    static func bbValue(_ value: Double) -> String {
+        String(format: "%.1f", value)
+    }
 }

@@ -45,7 +45,7 @@ struct PlatformsListView: View {
             }
         }
         .navigationTitle("Platforms")
-        .navigationBarTitleDisplayMode(.large)
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button {

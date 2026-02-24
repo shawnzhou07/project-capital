@@ -27,7 +27,7 @@ struct MoreView: View {
             .background(Color.appBackground)
         }
         .navigationTitle("More")
-        .navigationBarTitleDisplayMode(.large)
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 

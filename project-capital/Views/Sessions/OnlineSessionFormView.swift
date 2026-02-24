@@ -14,20 +14,30 @@ struct OnlineSessionFormView: View {
 
     @State private var selectedPlatform: Platform? = nil
     @State private var gameType = "No Limit Hold'em"
-    @State private var blinds = ""
+    @State private var smallBlind = ""
+    @State private var bigBlind = ""
+    @State private var straddle = ""
+    @State private var ante = ""
     @State private var tableSize = 6
     @State private var tables = 1
     @State private var startTime = Calendar.current.date(byAdding: .hour, value: -2, to: Date()) ?? Date()
     @State private var endTime = Date()
+    @State private var prevStartTime = Calendar.current.date(byAdding: .hour, value: -2, to: Date()) ?? Date()
+    @State private var prevEndTime = Date()
+    @State private var breakTimeStr = ""
     @State private var balanceBefore = ""
     @State private var balanceAfter = ""
     @State private var exchangeRate = "1.0000"
     @State private var handsOverride = ""
     @State private var notes = ""
     @State private var showPlatformPicker = false
+    @State private var showTimeAlert = false
+
+    var breakTimeMinutes: Double { Double(breakTimeStr) ?? 0 }
 
     var duration: Double {
-        endTime.timeIntervalSince(startTime) / 3600.0
+        let raw = endTime.timeIntervalSince(startTime) / 3600.0
+        return max(0, raw - breakTimeMinutes / 60.0)
     }
 
     var netPL: Double {
@@ -53,8 +63,11 @@ struct OnlineSessionFormView: View {
         return Int(duration * Double(settings.handsPerHourOnline) * Double(tables))
     }
 
+    var sbDouble: Double { Double(smallBlind) ?? 0 }
+    var bbDouble: Double { Double(bigBlind) ?? 0 }
+
     var isValid: Bool {
-        selectedPlatform != nil && !blinds.isEmpty && endTime > startTime
+        selectedPlatform != nil && sbDouble > 0 && bbDouble > 0 && endTime > startTime
     }
 
     var body: some View {
@@ -74,6 +87,13 @@ struct OnlineSessionFormView: View {
                 selectedPlatform = first
                 syncExchangeRate()
             }
+            prevStartTime = startTime
+            prevEndTime = endTime
+        }
+        .alert("Invalid Time Range", isPresented: $showTimeAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("End time must be after start time.")
         }
     }
 
@@ -136,13 +156,11 @@ struct OnlineSessionFormView: View {
             .foregroundColor(.appPrimary)
             .listRowBackground(Color.appSurface)
 
-            HStack {
-                Text("Blinds")
-                    .foregroundColor(.appPrimary)
-                Spacer()
-                TextField("1/2", text: $blinds)
-                    .multilineTextAlignment(.trailing)
-                    .foregroundColor(.appGold)
+            HStack(spacing: 12) {
+                blindField(label: "SB", text: $smallBlind)
+                blindField(label: "BB", text: $bigBlind)
+                blindField(label: "Straddle", text: $straddle)
+                blindField(label: "Ante", text: $ante)
             }
             .listRowBackground(Color.appSurface)
 
@@ -158,23 +176,76 @@ struct OnlineSessionFormView: View {
         }
     }
 
+    @ViewBuilder
+    func blindField(label: String, text: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label)
+                .font(.caption2)
+                .foregroundColor(.appSecondary)
+            TextField("0", text: text)
+                .keyboardType(.decimalPad)
+                .foregroundColor(.appGold)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
+                .background(Color.appSurface2)
+                .cornerRadius(6)
+        }
+    }
+
     var timingSection: some View {
         Section {
-            DatePicker("Start Time", selection: $startTime)
+            DatePicker("Start", selection: $startTime, displayedComponents: [.date, .hourAndMinute])
                 .foregroundColor(.appPrimary)
                 .tint(.appGold)
                 .listRowBackground(Color.appSurface)
+                .onChange(of: startTime) { oldVal, newVal in
+                    if oldVal.timeIntervalSince(newVal) > 20 * 3600 {
+                        startTime = Calendar.current.date(byAdding: .day, value: 1, to: newVal) ?? newVal
+                        return
+                    }
+                    if endTime <= startTime {
+                        showTimeAlert = true
+                        startTime = prevStartTime
+                    } else {
+                        prevStartTime = startTime
+                    }
+                }
 
-            DatePicker("End Time", selection: $endTime)
+            DatePicker("End", selection: $endTime, displayedComponents: [.date, .hourAndMinute])
                 .foregroundColor(.appPrimary)
                 .tint(.appGold)
                 .listRowBackground(Color.appSurface)
+                .onChange(of: endTime) { oldVal, newVal in
+                    if oldVal.timeIntervalSince(newVal) > 20 * 3600 {
+                        endTime = Calendar.current.date(byAdding: .day, value: 1, to: newVal) ?? newVal
+                        return
+                    }
+                    if endTime <= startTime {
+                        showTimeAlert = true
+                        endTime = prevEndTime
+                    } else {
+                        prevEndTime = endTime
+                    }
+                }
+
+            HStack {
+                Text("Break (min)")
+                    .foregroundColor(.appPrimary)
+                Spacer()
+                TextField("0", text: $breakTimeStr)
+                    .keyboardType(.numberPad)
+                    .multilineTextAlignment(.trailing)
+                    .foregroundColor(.appGold)
+                    .frame(width: 80)
+            }
+            .listRowBackground(Color.appSurface)
 
             HStack {
                 Text("Duration")
                     .foregroundColor(.appPrimary)
                 Spacer()
-                Text(AppFormatter.duration(max(0, duration)))
+                Text(AppFormatter.duration(duration))
                     .foregroundColor(.appSecondary)
             }
             .listRowBackground(Color.appSurface)
@@ -291,17 +362,25 @@ struct OnlineSessionFormView: View {
     }
 
     func saveSession() {
-        guard let platform = selectedPlatform else { return }
+        guard let platform = selectedPlatform, endTime > startTime else {
+            if endTime <= startTime { showTimeAlert = true }
+            return
+        }
         let session = OnlineCash(context: viewContext)
         session.id = UUID()
         session.platform = platform
         session.gameType = gameType
-        session.blinds = blinds
+        session.smallBlind = sbDouble
+        session.bigBlind = bbDouble
+        session.straddle = Double(straddle) ?? 0
+        session.ante = Double(ante) ?? 0
+        session.blinds = "\(AppFormatter.blindValue(sbDouble))/\(AppFormatter.blindValue(bbDouble))"
         session.tableSize = Int16(tableSize)
         session.tables = Int16(tables)
         session.startTime = startTime
         session.endTime = endTime
-        session.duration = max(0, duration)
+        session.breakTime = breakTimeMinutes
+        session.duration = duration
         session.balanceBefore = Double(balanceBefore) ?? 0
         session.balanceAfter = Double(balanceAfter) ?? 0
         session.netProfitLoss = netPL

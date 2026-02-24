@@ -62,6 +62,11 @@ public class OnlineCash: NSManagedObject {
     @NSManaged public var duration: Double
     @NSManaged public var gameType: String?
     @NSManaged public var blinds: String?
+    @NSManaged public var smallBlind: Double
+    @NSManaged public var bigBlind: Double
+    @NSManaged public var straddle: Double
+    @NSManaged public var ante: Double
+    @NSManaged public var breakTime: Double
     @NSManaged public var tableSize: Int16
     @NSManaged public var tables: Int16
     @NSManaged public var balanceBefore: Double
@@ -91,6 +96,11 @@ public class LiveCash: NSManagedObject {
     @NSManaged public var duration: Double
     @NSManaged public var gameType: String?
     @NSManaged public var blinds: String?
+    @NSManaged public var smallBlind: Double
+    @NSManaged public var bigBlind: Double
+    @NSManaged public var straddle: Double
+    @NSManaged public var ante: Double
+    @NSManaged public var breakTime: Double
     @NSManaged public var tableSize: Int16
     @NSManaged public var location: String?
     @NSManaged public var currency: String?

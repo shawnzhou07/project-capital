@@ -12,9 +12,12 @@
         <relationship name="withdrawals" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="Withdrawal" inverseName="platform" inverseEntity="Withdrawal"/>
     </entity>
     <entity name="OnlineCash" representedClassName="OnlineCash" syncable="YES" codeGenerationType="none">
+        <attribute name="ante" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
         <attribute name="balanceAfter" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
         <attribute name="balanceBefore" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="bigBlind" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
         <attribute name="blinds" optional="YES" attributeType="String"/>
+        <attribute name="breakTime" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
         <attribute name="duration" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
         <attribute name="endTime" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="exchangeRateToBase" optional="YES" attributeType="Double" defaultValueString="1.0" usesScalarValueType="YES"/>
@@ -25,13 +28,18 @@
         <attribute name="netProfitLoss" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
         <attribute name="netProfitLossBase" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
         <attribute name="notes" optional="YES" attributeType="String"/>
+        <attribute name="smallBlind" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
         <attribute name="startTime" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="straddle" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
         <attribute name="tableSize" optional="YES" attributeType="Integer 16" defaultValueString="9" usesScalarValueType="YES"/>
         <attribute name="tables" optional="YES" attributeType="Integer 16" defaultValueString="1" usesScalarValueType="YES"/>
         <relationship name="platform" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Platform" inverseName="onlineSessions" inverseEntity="Platform"/>
     </entity>
     <entity name="LiveCash" representedClassName="LiveCash" syncable="YES" codeGenerationType="none">
+        <attribute name="ante" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="bigBlind" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
         <attribute name="blinds" optional="YES" attributeType="String"/>
+        <attribute name="breakTime" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
         <attribute name="buyIn" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
         <attribute name="cashOut" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
         <attribute name="currency" optional="YES" attributeType="String"/>
@@ -48,7 +56,9 @@
         <attribute name="netProfitLoss" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
         <attribute name="netProfitLossBase" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
         <attribute name="notes" optional="YES" attributeType="String"/>
+        <attribute name="smallBlind" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
         <attribute name="startTime" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="straddle" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
         <attribute name="tableSize" optional="YES" attributeType="Integer 16" defaultValueString="9" usesScalarValueType="YES"/>
         <attribute name="tips" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
     </entity>

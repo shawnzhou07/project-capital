@@ -16,6 +16,7 @@ struct WithdrawalFormView: View {
 
     @State private var showNegativeFeeWarning = false
     @State private var showLockConfirmation = false
+    @State private var showProfitAlert = false
 
     var isSameCurrency: Bool { platform.displayCurrency == baseCurrency }
 
@@ -34,6 +35,14 @@ struct WithdrawalFormView: View {
 
     var isValid: Bool {
         (Double(amountRequested) ?? 0) > 0 && (Double(amountReceived) ?? 0) > 0
+    }
+
+    // Block if received > requested in same-unit contexts (same currency or non-FX)
+    var isProfitTransaction: Bool {
+        let requested = Double(amountRequested) ?? 0
+        let received = Double(amountReceived) ?? 0
+        guard requested > 0, received > 0 else { return false }
+        return (isSameCurrency || !isForeignExchange) && received > requested
     }
 
     var requestedLabel: String {
@@ -64,6 +73,11 @@ struct WithdrawalFormView: View {
                     Button("Cancel") { dismiss() }.foregroundColor(.appSecondary)
                 }
             }
+        }
+        .alert("Invalid Transaction", isPresented: $showProfitAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("You cannot receive more than you sent.")
         }
         .alert("Negative Processing Fee", isPresented: $showNegativeFeeWarning) {
             Button("Save Anyway") { showLockConfirmation = true }
@@ -171,7 +185,9 @@ struct WithdrawalFormView: View {
     var saveSection: some View {
         Section {
             Button {
-                if !isSameCurrency && !isForeignExchange && processingFee < 0 {
+                if isProfitTransaction {
+                    showProfitAlert = true
+                } else if !isSameCurrency && !isForeignExchange && processingFee < 0 {
                     showNegativeFeeWarning = true
                 } else {
                     showLockConfirmation = true

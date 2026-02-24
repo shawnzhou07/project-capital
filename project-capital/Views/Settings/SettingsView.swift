@@ -3,6 +3,7 @@ import CoreData
 
 struct SettingsView: View {
     @Environment(\.managedObjectContext) private var viewContext
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     @AppStorage("baseCurrency") private var baseCurrency = "CAD"
     @AppStorage("handsPerHourOnline") private var handsPerHourOnline = 85
     @AppStorage("handsPerHourLive") private var handsPerHourLive = 25
@@ -27,12 +28,12 @@ struct SettingsView: View {
             .background(Color.appBackground)
         }
         .navigationTitle("Settings")
-        .navigationBarTitleDisplayMode(.large)
+        .navigationBarTitleDisplayMode(.inline)
         .alert("Reset All Data?", isPresented: $showResetConfirmation) {
             Button("Reset Everything", role: .destructive) { performReset() }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This will permanently delete all sessions, platforms, deposits, withdrawals, and adjustments. This cannot be undone.")
+            Text(resetAlertMessage)
         }
     }
 
@@ -236,6 +237,28 @@ struct SettingsView: View {
         }
     }
 
+    var resetAlertMessage: String {
+        func countEntity(_ name: String) -> Int {
+            let req = NSFetchRequest<NSFetchRequestResult>(entityName: name)
+            return (try? viewContext.count(for: req)) ?? 0
+        }
+        let sessions = countEntity("OnlineCash") + countEntity("LiveCash")
+        let platforms = countEntity("Platform")
+        let deposits = countEntity("Deposit")
+        let withdrawals = countEntity("Withdrawal")
+        let adjustments = countEntity("Adjustment")
+
+        var parts: [String] = []
+        if sessions > 0 { parts.append("\(sessions) session\(sessions == 1 ? "" : "s")") }
+        if platforms > 0 { parts.append("\(platforms) platform\(platforms == 1 ? "" : "s")") }
+        if deposits > 0 { parts.append("\(deposits) deposit\(deposits == 1 ? "" : "s")") }
+        if withdrawals > 0 { parts.append("\(withdrawals) withdrawal\(withdrawals == 1 ? "" : "s")") }
+        if adjustments > 0 { parts.append("\(adjustments) adjustment\(adjustments == 1 ? "" : "s")") }
+
+        let countText = parts.isEmpty ? "No data found." : "This will permanently delete \(parts.joined(separator: ", "))."
+        return "\(countText) You will be returned to onboarding. This cannot be undone."
+    }
+
     func exportData() {
         // TODO: Implement data export
     }
@@ -251,7 +274,17 @@ struct SettingsView: View {
             let deleteRequest = NSBatchDeleteRequest(fetchRequest: fetchRequest)
             let _ = try? viewContext.execute(deleteRequest)
         }
+        viewContext.refreshAllObjects()
         try? viewContext.save()
+
+        let defaults = UserDefaults.standard
+        for key in ["baseCurrency", "handsPerHourOnline", "handsPerHourLive",
+                    "exchangeRateInputMode", "defaultRateUSDToBase", "defaultRateEURToBase",
+                    "defaultRateUSDToEUR", "showAdjustmentsInStats"] {
+            defaults.removeObject(forKey: key)
+        }
+
+        hasCompletedOnboarding = false
     }
 }
 

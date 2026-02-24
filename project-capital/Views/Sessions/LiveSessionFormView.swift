@@ -12,22 +12,33 @@ struct LiveSessionFormView: View {
     @State private var currency = "CAD"
     @State private var exchangeRate = "1.0000"
     @State private var gameType = "No Limit Hold'em"
-    @State private var blinds = ""
+    @State private var smallBlind = ""
+    @State private var bigBlind = ""
+    @State private var straddle = ""
+    @State private var ante = ""
     @State private var tableSize = 9
     @State private var startTime = Calendar.current.date(byAdding: .hour, value: -4, to: Date()) ?? Date()
     @State private var endTime = Date()
+    @State private var prevStartTime = Calendar.current.date(byAdding: .hour, value: -4, to: Date()) ?? Date()
+    @State private var prevEndTime = Date()
     @State private var buyIn = ""
     @State private var cashOut = ""
-    @State private var tips = "0"
+    @State private var tips = ""
+    @State private var breakTimeStr = ""
     @State private var handsOverride = ""
     @State private var notes = ""
+    @State private var showTimeAlert = false
+
+    var breakTimeMinutes: Double { Double(breakTimeStr) ?? 0 }
 
     var duration: Double {
-        endTime.timeIntervalSince(startTime) / 3600.0
+        let raw = endTime.timeIntervalSince(startTime) / 3600.0
+        return max(0, raw - breakTimeMinutes / 60.0)
     }
 
+    // Net P&L excludes tips (tips are record-keeping only)
     var netPL: Double {
-        (Double(cashOut) ?? 0) - (Double(buyIn) ?? 0) - (Double(tips) ?? 0)
+        (Double(cashOut) ?? 0) - (Double(buyIn) ?? 0)
     }
 
     var netPLBase: Double {
@@ -40,8 +51,11 @@ struct LiveSessionFormView: View {
         Int(max(0, duration) * Double(UserSettings.shared.handsPerHourLive))
     }
 
+    var sbDouble: Double { Double(smallBlind) ?? 0 }
+    var bbDouble: Double { Double(bigBlind) ?? 0 }
+
     var isValid: Bool {
-        !location.isEmpty && !blinds.isEmpty && endTime > startTime
+        !location.isEmpty && sbDouble > 0 && bbDouble > 0 && endTime > startTime
     }
 
     var body: some View {
@@ -58,6 +72,13 @@ struct LiveSessionFormView: View {
         .background(Color.appBackground)
         .onAppear {
             currency = baseCurrency
+            prevStartTime = startTime
+            prevEndTime = endTime
+        }
+        .alert("Invalid Time Range", isPresented: $showTimeAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("End time must be after start time.")
         }
     }
 
@@ -113,13 +134,11 @@ struct LiveSessionFormView: View {
             .foregroundColor(.appPrimary)
             .listRowBackground(Color.appSurface)
 
-            HStack {
-                Text("Blinds")
-                    .foregroundColor(.appPrimary)
-                Spacer()
-                TextField("1/2", text: $blinds)
-                    .multilineTextAlignment(.trailing)
-                    .foregroundColor(.appGold)
+            HStack(spacing: 12) {
+                blindField(label: "SB", text: $smallBlind)
+                blindField(label: "BB", text: $bigBlind)
+                blindField(label: "Straddle", text: $straddle)
+                blindField(label: "Ante", text: $ante)
             }
             .listRowBackground(Color.appSurface)
 
@@ -131,23 +150,77 @@ struct LiveSessionFormView: View {
         }
     }
 
+    @ViewBuilder
+    func blindField(label: String, text: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label)
+                .font(.caption2)
+                .foregroundColor(.appSecondary)
+            TextField("0", text: text)
+                .keyboardType(.decimalPad)
+                .foregroundColor(.appGold)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
+                .background(Color.appSurface2)
+                .cornerRadius(6)
+        }
+    }
+
     var timingSection: some View {
         Section {
-            DatePicker("Start Time", selection: $startTime)
+            DatePicker("Start", selection: $startTime, displayedComponents: [.date, .hourAndMinute])
                 .foregroundColor(.appPrimary)
                 .tint(.appGold)
                 .listRowBackground(Color.appSurface)
+                .onChange(of: startTime) { oldVal, newVal in
+                    // Midnight rollover detection: time wrapped from ~23:59 to ~00:00
+                    if oldVal.timeIntervalSince(newVal) > 20 * 3600 {
+                        startTime = Calendar.current.date(byAdding: .day, value: 1, to: newVal) ?? newVal
+                        return
+                    }
+                    if endTime <= startTime {
+                        showTimeAlert = true
+                        startTime = prevStartTime
+                    } else {
+                        prevStartTime = startTime
+                    }
+                }
 
-            DatePicker("End Time", selection: $endTime)
+            DatePicker("End", selection: $endTime, displayedComponents: [.date, .hourAndMinute])
                 .foregroundColor(.appPrimary)
                 .tint(.appGold)
                 .listRowBackground(Color.appSurface)
+                .onChange(of: endTime) { oldVal, newVal in
+                    if oldVal.timeIntervalSince(newVal) > 20 * 3600 {
+                        endTime = Calendar.current.date(byAdding: .day, value: 1, to: newVal) ?? newVal
+                        return
+                    }
+                    if endTime <= startTime {
+                        showTimeAlert = true
+                        endTime = prevEndTime
+                    } else {
+                        prevEndTime = endTime
+                    }
+                }
+
+            HStack {
+                Text("Break (min)")
+                    .foregroundColor(.appPrimary)
+                Spacer()
+                TextField("0", text: $breakTimeStr)
+                    .keyboardType(.numberPad)
+                    .multilineTextAlignment(.trailing)
+                    .foregroundColor(.appGold)
+                    .frame(width: 80)
+            }
+            .listRowBackground(Color.appSurface)
 
             HStack {
                 Text("Duration")
                     .foregroundColor(.appPrimary)
                 Spacer()
-                Text(AppFormatter.duration(max(0, duration)))
+                Text(AppFormatter.duration(duration))
                     .foregroundColor(.appSecondary)
             }
             .listRowBackground(Color.appSurface)
@@ -165,7 +238,7 @@ struct LiveSessionFormView: View {
                 Text(currency)
                     .font(.caption)
                     .foregroundColor(.appSecondary)
-                TextField("0.00", text: $buyIn)
+                TextField("0", text: $buyIn)
                     .keyboardType(.decimalPad)
                     .multilineTextAlignment(.trailing)
                     .foregroundColor(.appPrimary)
@@ -180,7 +253,7 @@ struct LiveSessionFormView: View {
                 Text(currency)
                     .font(.caption)
                     .foregroundColor(.appSecondary)
-                TextField("0.00", text: $cashOut)
+                TextField("0", text: $cashOut)
                     .keyboardType(.decimalPad)
                     .multilineTextAlignment(.trailing)
                     .foregroundColor(.appPrimary)
@@ -195,7 +268,7 @@ struct LiveSessionFormView: View {
                 Text(currency)
                     .font(.caption)
                     .foregroundColor(.appSecondary)
-                TextField("0.00", text: $tips)
+                TextField("0", text: $tips)
                     .keyboardType(.decimalPad)
                     .multilineTextAlignment(.trailing)
                     .foregroundColor(.appPrimary)
@@ -272,25 +345,27 @@ struct LiveSessionFormView: View {
     }
 
     func requestLocation() {
-        // Basic GPS suggestion — in production, use CLGeocoder with nearby POI search
         let manager = CLLocationManager()
         manager.requestWhenInUseAuthorization()
-        // Placeholder — would normally do a reverse geocode here
-        // For now just focus the location field for user input
     }
 
     func saveSession() {
+        guard endTime > startTime else { showTimeAlert = true; return }
         let session = LiveCash(context: viewContext)
         session.id = UUID()
         session.location = location
         session.currency = currency
         session.exchangeRateToBase = Double(exchangeRate) ?? 1.0
         session.gameType = gameType
-        session.blinds = blinds
+        session.smallBlind = sbDouble
+        session.bigBlind = bbDouble
+        session.straddle = Double(straddle) ?? 0
+        session.ante = Double(ante) ?? 0
         session.tableSize = Int16(tableSize)
         session.startTime = startTime
         session.endTime = endTime
-        session.duration = max(0, duration)
+        session.breakTime = breakTimeMinutes
+        session.duration = duration
         session.buyIn = Double(buyIn) ?? 0
         session.cashOut = Double(cashOut) ?? 0
         session.tips = Double(tips) ?? 0

@@ -30,6 +30,7 @@ struct PlatformDetailView: View {
                     sessionsSection
                     depositsSection
                     withdrawalsSection
+                    adjustmentsSection
                     dangerZone
                 }
                 .padding()
@@ -259,6 +260,67 @@ struct PlatformDetailView: View {
             } else {
                 ForEach(platform.withdrawalsArray.reversed()) { withdrawal in
                     WithdrawalRowView(withdrawal: withdrawal, platformCurrency: platform.displayCurrency)
+                }
+            }
+        }
+    }
+
+    // MARK: - Adjustments Section
+
+    var adjustmentsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Adjustments")
+                    .font(.headline)
+                    .foregroundColor(.appGold)
+                Spacer()
+                let total = platform.totalAdjustments
+                if total != 0 {
+                    Text(AppFormatter.currencySigned(total, code: baseCurrency))
+                        .font(.caption)
+                        .foregroundColor(total.profitColor)
+                }
+            }
+
+            if platform.adjustmentsArray.isEmpty {
+                Text("No adjustments recorded.")
+                    .font(.caption)
+                    .foregroundColor(.appSecondary)
+                    .padding()
+                    .frame(maxWidth: .infinity)
+                    .background(Color.appSurface)
+                    .cornerRadius(8)
+            } else {
+                ForEach(platform.adjustmentsArray.sorted(by: { ($0.date ?? Date.distantPast) > ($1.date ?? Date.distantPast) })) { adj in
+                    NavigationLink {
+                        AdjustmentDetailView(adjustment: adj)
+                    } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(adj.name ?? "Adjustment")
+                                    .font(.subheadline)
+                                    .foregroundColor(.appPrimary)
+                                Text(AppFormatter.shortDate(adj.date ?? Date()))
+                                    .font(.caption)
+                                    .foregroundColor(.appSecondary)
+                            }
+                            Spacer()
+                            VStack(alignment: .trailing, spacing: 2) {
+                                Text(AppFormatter.currencySigned(adj.amountBase, code: baseCurrency))
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(adj.amountBase.profitColor)
+                                if let currency = adj.currency, currency != baseCurrency {
+                                    Text(AppFormatter.currencySigned(adj.amount, code: currency))
+                                        .font(.caption)
+                                        .foregroundColor(.appSecondary)
+                                }
+                            }
+                        }
+                        .padding()
+                        .background(Color.appSurface)
+                        .cornerRadius(8)
+                    }
                 }
             }
         }

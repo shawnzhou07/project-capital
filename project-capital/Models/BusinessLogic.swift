@@ -20,57 +20,43 @@ extension Platform {
         (adjustments?.allObjects as? [Adjustment] ?? []).sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
     }
 
-    // Latest conversion rate: platform currency → base currency (e.g. CAD per USD).
-    // From FX deposit: effectiveExchangeRate = platformCurrency/baseCurrency → invert to get baseCurrency/platformCurrency.
-    // From FX withdrawal: effectiveExchangeRate = baseCurrency/platformCurrency → use directly.
     var latestFXConversionRate: Double {
         var transactions: [(date: Date, rateToBase: Double)] = []
-
         for d in depositsArray where d.isForeignExchange && d.effectiveExchangeRate > 0 {
             transactions.append((date: d.date ?? .distantPast, rateToBase: 1.0 / d.effectiveExchangeRate))
         }
-
         for w in withdrawalsArray where w.isForeignExchange && w.effectiveExchangeRate > 0 {
             transactions.append((date: w.date ?? .distantPast, rateToBase: w.effectiveExchangeRate))
         }
-
         return transactions.sorted { $0.date < $1.date }.last?.rateToBase ?? 1.0
     }
 
-    // Total deposited in base currency
     var totalDeposited: Double {
         let rate = latestFXConversionRate
         return depositsArray.reduce(0) { sum, d in
-            if d.isForeignExchange {
-                return sum + d.amountSent          // Already in base currency
-            } else {
-                return sum + d.amountSent * rate   // Convert platform → base
-            }
+            d.isForeignExchange ? sum + d.amountSent : sum + d.amountSent * rate
         }
     }
 
-    // Total withdrawn in base currency
     var totalWithdrawn: Double {
         let rate = latestFXConversionRate
         return withdrawalsArray.reduce(0) { sum, w in
-            if w.isForeignExchange {
-                return sum + w.amountReceived          // Already in base currency
-            } else {
-                return sum + w.amountReceived * rate   // Convert platform → base
-            }
+            w.isForeignExchange ? sum + w.amountReceived : sum + w.amountReceived * rate
         }
     }
 
-    // Net result: withdrawals (base) + current balance (base) − deposits (base).
-    // Returns 0 if no deposits or withdrawals have been recorded yet.
+    var totalAdjustments: Double {
+        adjustmentsArray.reduce(0) { $0 + $1.amountBase }
+    }
+
+    // Net result: withdrawals (base) + current balance (base) − deposits (base) + adjustments (base).
     var netResult: Double {
         guard !depositsArray.isEmpty || !withdrawalsArray.isEmpty else { return 0 }
         let rate = latestFXConversionRate
         let currentValueBase = currentBalance * rate
-        return totalWithdrawn + currentValueBase - totalDeposited
+        return totalWithdrawn + currentValueBase - totalDeposited + totalAdjustments
     }
 
-    // Net result expressed in the platform's own currency (for supplemental display)
     var netResultInPlatformCurrency: Double {
         let rate = latestFXConversionRate
         guard rate > 0 else { return netResult }
@@ -86,7 +72,9 @@ extension Platform {
 extension OnlineCash {
     var computedDuration: Double {
         guard let start = startTime, let end = endTime else { return duration }
-        return end.timeIntervalSince(start) / 3600.0
+        let rawHours = end.timeIntervalSince(start) / 3600.0
+        let breakHours = breakTime / 60.0
+        return max(0, rawHours - breakHours)
     }
 
     var isLive: Bool { false }
@@ -103,17 +91,34 @@ extension OnlineCash {
     var platformName: String { platform?.displayName ?? "Unknown" }
     var platformCurrency: String { platform?.displayCurrency ?? "USD" }
     var displayGameType: String { gameType ?? "Hold'em" }
-    var displayBlinds: String { blinds ?? "" }
 
-    var isActive: Bool {
-        endTime == nil && startTime != nil
+    var displayBlinds: String {
+        if smallBlind > 0 || bigBlind > 0 {
+            return "$\(AppFormatter.blindValue(smallBlind))/$\(AppFormatter.blindValue(bigBlind))"
+        }
+        return blinds ?? ""
+    }
+
+    var isActive: Bool { endTime == nil && startTime != nil }
+
+    var bbWon: Double {
+        guard bigBlind > 0 else { return 0 }
+        return netProfitLoss / bigBlind
+    }
+
+    var bbPer100: Double {
+        let hands = effectiveHands
+        guard hands > 0, bigBlind > 0 else { return 0 }
+        return (bbWon / Double(hands)) * 100.0
     }
 }
 
 extension LiveCash {
     var computedDuration: Double {
         guard let start = startTime, let end = endTime else { return duration }
-        return end.timeIntervalSince(start) / 3600.0
+        let rawHours = end.timeIntervalSince(start) / 3600.0
+        let breakHours = breakTime / 60.0
+        return max(0, rawHours - breakHours)
     }
 
     var isLive: Bool { true }
@@ -128,20 +133,36 @@ extension LiveCash {
     var displayLocation: String { location ?? "Unknown Location" }
     var displayCurrency: String { currency ?? "USD" }
     var displayGameType: String { gameType ?? "Hold'em" }
-    var displayBlinds: String { blinds ?? "" }
 
-    var isActive: Bool {
-        endTime == nil && startTime != nil
+    var displayBlinds: String {
+        if smallBlind > 0 || bigBlind > 0 {
+            return "$\(AppFormatter.blindValue(smallBlind))/$\(AppFormatter.blindValue(bigBlind))"
+        }
+        return blinds ?? ""
     }
 
-    // Net result excludes tips — tips are for record-keeping only
+    var isActive: Bool { endTime == nil && startTime != nil }
+
+    // Net result excludes tips
     var netResult: Double { cashOut - buyIn }
-    // Use exchangeRateCashOut when set (new dual-rate system), fall back to exchangeRateToBase
+
     var netResultBase: Double {
         let rate = exchangeRateCashOut > 0 ? exchangeRateCashOut : exchangeRateToBase
         return netResult * rate
     }
+
     var hasExchangeRates: Bool { currency != nil && currency != "" }
+
+    var bbWon: Double {
+        guard bigBlind > 0 else { return 0 }
+        return netResult / bigBlind
+    }
+
+    var bbPer100: Double {
+        let hands = effectiveHands
+        guard hands > 0, bigBlind > 0 else { return 0 }
+        return (bbWon / Double(hands)) * 100.0
+    }
 }
 
 // MARK: - Stats Computation
@@ -154,6 +175,7 @@ struct StatsResult {
     var sessionCount: Int = 0
     var winCount: Int = 0
     var adjustmentsTotal: Double = 0
+    var totalBBWon: Double = 0
 
     var hourlyRate: Double {
         totalHours > 0 ? netResult / totalHours : 0
@@ -165,6 +187,14 @@ struct StatsResult {
 
     var winRate: Double {
         sessionCount > 0 ? Double(winCount) / Double(sessionCount) : 0
+    }
+
+    var bbPerHour: Double {
+        totalHours > 0 ? totalBBWon / totalHours : 0
+    }
+
+    var bbPer100: Double {
+        totalHands > 0 ? (totalBBWon / Double(totalHands)) * 100.0 : 0
     }
 }
 
@@ -230,15 +260,16 @@ func computeStats(
         result.totalHands += session.effectiveHands
         result.sessionCount += 1
         if session.netProfitLoss > 0 { result.winCount += 1 }
+        result.totalBBWon += session.bbWon
     }
 
     for session in filteredLive {
-        // Use tips-excluded net result for accuracy
         result.netResultNoAdj += session.netResultBase
         result.totalHours += session.computedDuration
         result.totalHands += session.effectiveHands
         result.sessionCount += 1
         if session.netResult > 0 { result.winCount += 1 }
+        result.totalBBWon += session.bbWon
     }
 
     if showAdjustments {

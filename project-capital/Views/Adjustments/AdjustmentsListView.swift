@@ -1,6 +1,24 @@
 import SwiftUI
 import CoreData
 
+private enum AdjTypeFilter: String, CaseIterable {
+    case all = "All"
+    case online = "Online"
+    case live = "Live"
+}
+
+private enum AdjSignFilter: String, CaseIterable {
+    case all = "All"
+    case positive = "+"
+    case negative = "−"
+}
+
+private enum AdjDateFilter: String, CaseIterable {
+    case allTime = "All Time"
+    case thisMonth = "This Month"
+    case thisYear = "This Year"
+}
+
 struct AdjustmentsListView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @AppStorage("baseCurrency") private var baseCurrency = "CAD"
@@ -11,27 +29,67 @@ struct AdjustmentsListView: View {
     ) private var adjustments: FetchedResults<Adjustment>
 
     @State private var showAddAdjustment = false
+    @State private var typeFilter: AdjTypeFilter = .all
+    @State private var signFilter: AdjSignFilter = .all
+    @State private var dateFilter: AdjDateFilter = .allTime
 
-    var totalBase: Double {
-        adjustments.reduce(0) { $0 + $1.amountBase }
+    var filteredAdjustments: [Adjustment] {
+        var result = Array(adjustments)
+
+        switch typeFilter {
+        case .online: result = result.filter { $0.isOnline }
+        case .live:   result = result.filter { !$0.isOnline }
+        case .all:    break
+        }
+
+        switch signFilter {
+        case .positive: result = result.filter { $0.amountBase > 0 }
+        case .negative: result = result.filter { $0.amountBase < 0 }
+        case .all:      break
+        }
+
+        let calendar = Calendar.current
+        let now = Date()
+        switch dateFilter {
+        case .thisMonth:
+            let comps = calendar.dateComponents([.year, .month], from: now)
+            if let start = calendar.date(from: comps) {
+                result = result.filter { ($0.date ?? Date.distantPast) >= start }
+            }
+        case .thisYear:
+            let comps = calendar.dateComponents([.year], from: now)
+            if let start = calendar.date(from: comps) {
+                result = result.filter { ($0.date ?? Date.distantPast) >= start }
+            }
+        case .allTime: break
+        }
+
+        return result
+    }
+
+    var filteredTotal: Double {
+        filteredAdjustments.reduce(0) { $0 + $1.amountBase }
     }
 
     var body: some View {
         ZStack {
             Color.appBackground.ignoresSafeArea()
             VStack(spacing: 0) {
-                if !adjustments.isEmpty {
+                filterBar
+                if !filteredAdjustments.isEmpty {
                     totalBar
                 }
                 if adjustments.isEmpty {
                     emptyState
+                } else if filteredAdjustments.isEmpty {
+                    noResultsState
                 } else {
                     adjustmentList
                 }
             }
         }
         .navigationTitle("Adjustments")
-        .navigationBarTitleDisplayMode(.large)
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button {
@@ -47,16 +105,52 @@ struct AdjustmentsListView: View {
         }
     }
 
+    var filterBar: some View {
+        VStack(spacing: 6) {
+            // Row 1: Type + Sign
+            HStack(spacing: 8) {
+                ForEach(AdjTypeFilter.allCases, id: \.self) { f in
+                    FilterChip(label: f.rawValue, isSelected: typeFilter == f) {
+                        typeFilter = f
+                    }
+                }
+                Divider()
+                    .frame(height: 20)
+                    .background(Color.appBorder)
+                ForEach(AdjSignFilter.allCases, id: \.self) { f in
+                    FilterChip(label: f.rawValue, isSelected: signFilter == f) {
+                        signFilter = f
+                    }
+                }
+                Spacer()
+            }
+            .padding(.horizontal)
+
+            // Row 2: Date
+            HStack(spacing: 8) {
+                ForEach(AdjDateFilter.allCases, id: \.self) { f in
+                    FilterChip(label: f.rawValue, isSelected: dateFilter == f) {
+                        dateFilter = f
+                    }
+                }
+                Spacer()
+            }
+            .padding(.horizontal)
+        }
+        .padding(.vertical, 8)
+        .background(Color.appBackground)
+    }
+
     var totalBar: some View {
         HStack {
             Text("Total")
                 .font(.subheadline)
                 .foregroundColor(.appSecondary)
             Spacer()
-            Text(AppFormatter.currencySigned(totalBase, code: baseCurrency))
+            Text(AppFormatter.currencySigned(filteredTotal, code: baseCurrency))
                 .font(.subheadline)
                 .fontWeight(.semibold)
-                .foregroundColor(totalBase.profitColor)
+                .foregroundColor(filteredTotal.profitColor)
         }
         .padding(.horizontal)
         .padding(.vertical, 10)
@@ -65,7 +159,7 @@ struct AdjustmentsListView: View {
 
     var adjustmentList: some View {
         List {
-            ForEach(Array(adjustments)) { adjustment in
+            ForEach(filteredAdjustments) { adjustment in
                 NavigationLink {
                     AdjustmentDetailView(adjustment: adjustment)
                 } label: {
@@ -96,7 +190,20 @@ struct AdjustmentsListView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()
     }
+
+    var noResultsState: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "line.3.horizontal.decrease.circle")
+                .font(.system(size: 40))
+                .foregroundColor(.appSecondary)
+            Text("No matching adjustments")
+                .font(.subheadline)
+                .foregroundColor(.appSecondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
 }
+
 
 struct AdjustmentRowView: View {
     let adjustment: Adjustment
@@ -114,17 +221,11 @@ struct AdjustmentRowView: View {
                         .font(.caption)
                         .foregroundColor(.appSecondary)
                     if adjustment.isOnline, let platform = adjustment.platform {
-                        Text("·")
-                            .foregroundColor(.appSecondary)
-                        Text(platform.displayName)
-                            .font(.caption)
-                            .foregroundColor(.appSecondary)
+                        Text("·").foregroundColor(.appSecondary)
+                        Text(platform.displayName).font(.caption).foregroundColor(.appSecondary)
                     } else if let location = adjustment.location, !location.isEmpty {
-                        Text("·")
-                            .foregroundColor(.appSecondary)
-                        Text(location)
-                            .font(.caption)
-                            .foregroundColor(.appSecondary)
+                        Text("·").foregroundColor(.appSecondary)
+                        Text(location).font(.caption).foregroundColor(.appSecondary)
                     }
                 }
             }

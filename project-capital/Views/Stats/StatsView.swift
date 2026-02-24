@@ -41,13 +41,16 @@ struct StatsView: View {
                     dateFilterBar
                     sessionFilterBar
                     statsGrid
+                    if stats.totalHands > 0 {
+                        bbStatsSection
+                    }
                     platformBreakdown
                 }
                 .padding()
             }
         }
         .navigationTitle("Statistics")
-        .navigationBarTitleDisplayMode(.large)
+        .navigationBarTitleDisplayMode(.inline)
     }
 
     // MARK: - Net Result Header
@@ -164,6 +167,42 @@ struct StatsView: View {
                 color: stats.sessionCount == 0 ? .appSecondary : (stats.winRate > 0.5 ? .appProfit : .appLoss)
             )
         }
+    }
+
+    // MARK: - BB Stats Section
+
+    var bbStatsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Big Blind Tracking")
+                .font(.headline).foregroundColor(.appGold)
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                StatCard(
+                    title: "BB Net",
+                    value: bbSigned(stats.totalBBWon) + " BB",
+                    icon: "b.circle.fill",
+                    color: stats.totalBBWon == 0 ? .appSecondary : stats.totalBBWon.profitColor
+                )
+                StatCard(
+                    title: "BB / Hour",
+                    value: bbSigned(stats.bbPerHour),
+                    icon: "clock.fill",
+                    color: stats.bbPerHour == 0 ? .appSecondary : stats.bbPerHour.profitColor
+                )
+                StatCard(
+                    title: "BB / 100",
+                    value: bbSigned(stats.bbPer100),
+                    icon: "suit.spade.fill",
+                    color: stats.bbPer100 == 0 ? .appSecondary : stats.bbPer100.profitColor
+                )
+            }
+        }
+    }
+
+    func bbSigned(_ value: Double) -> String {
+        let formatted = AppFormatter.bbValue(abs(value))
+        if value > 0 { return "+\(formatted)" }
+        if value < 0 { return "-\(formatted)" }
+        return formatted
     }
 
     // MARK: - Platform Breakdown
