@@ -78,7 +78,7 @@ struct LiveSessionDetailView: View {
             Color.appBackground.ignoresSafeArea()
             if isVerified {
                 RoundedRectangle(cornerRadius: 0)
-                    .stroke(Color.appGold.opacity(0.4), lineWidth: 1)
+                    .stroke(Color.appGold.opacity(0.35), lineWidth: 2.0)
                     .ignoresSafeArea()
                     .allowsHitTesting(false)
                     .zIndex(999)
@@ -231,9 +231,18 @@ struct LiveSessionDetailView: View {
     var headerSection: some View {
         Section {
             VStack(spacing: 8) {
-                Text(AppFormatter.currencySigned(session.netProfitLossBase))
-                    .font(.system(size: 36, weight: .bold))
-                    .foregroundColor(session.netProfitLossBase.profitColor)
+                HStack(spacing: 8) {
+                    if isVerified {
+                        Image(systemName: "lock.fill")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.appGold)
+                            .shadow(color: Color.appGold.opacity(0.6), radius: 6, x: 0, y: 0)
+                    }
+                    Text(AppFormatter.currencySigned(session.netProfitLossBase))
+                        .font(.system(size: 36, weight: .bold))
+                        .foregroundColor(session.netProfitLossBase.profitColor)
+                        .shadow(color: session.netProfitLossBase.profitColor.opacity(isVerified ? 0.5 : 0), radius: 8, x: 0, y: 0)
+                }
                 HStack(spacing: 16) {
                     Label(AppFormatter.duration(session.computedDuration), systemImage: "clock")
                     Label(AppFormatter.handsCount(session.effectiveHands) + " hands", systemImage: "suit.spade")
@@ -264,7 +273,7 @@ struct LiveSessionDetailView: View {
                 Spacer()
                 TextField("Casino / location", text: $location)
                     .multilineTextAlignment(.trailing)
-                    .foregroundColor(.appGold)
+                    .foregroundColor(.white)
             }
             .listRowBackground(Color.appSurface)
 
@@ -296,8 +305,8 @@ struct LiveSessionDetailView: View {
             HStack(spacing: 12) {
                 blindField(label: "SB", text: $smallBlind)
                 blindField(label: "BB", text: $bigBlind)
-                blindField(label: "Straddle", text: $straddle)
-                blindField(label: "Ante", text: $ante)
+                blindField(label: "3rd (Opt.)", text: $straddle)
+                blindField(label: "Ante (Opt.)", text: $ante)
             }
             .listRowBackground(Color.appSurface)
 
@@ -317,7 +326,7 @@ struct LiveSessionDetailView: View {
                 .foregroundColor(.appSecondary)
             TextField("0", text: text)
                 .keyboardType(.decimalPad)
-                .foregroundColor(.appGold)
+                .foregroundColor(.white)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 6)
@@ -342,7 +351,7 @@ struct LiveSessionDetailView: View {
                 TextField("0", text: $breakTimeStr)
                     .keyboardType(.numberPad)
                     .multilineTextAlignment(.trailing)
-                    .foregroundColor(.appGold)
+                    .foregroundColor(.white)
                     .frame(width: 80)
             }
             .listRowBackground(Color.appSurface)
@@ -529,7 +538,7 @@ struct LiveSessionDetailView: View {
                 Spacer()
                 TextField("Auto (\(estimatedHands) est.)", text: $handsOverride)
                     .keyboardType(.numberPad).multilineTextAlignment(.trailing)
-                    .foregroundColor(.appGold).frame(width: 140)
+                    .foregroundColor(.white).frame(width: 140)
             }
             .listRowBackground(Color.appSurface)
         } header: {

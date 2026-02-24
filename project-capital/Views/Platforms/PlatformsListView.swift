@@ -114,6 +114,11 @@ struct PlatformRowView: View {
 
     var isSameCurrency: Bool { platform.displayCurrency == baseCurrency }
 
+    // White for zero or positive, red for negative — never green
+    var netResultColor: Color {
+        platform.netResult < 0 ? .appLoss : .appPrimary
+    }
+
     var body: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
@@ -127,19 +132,14 @@ struct PlatformRowView: View {
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 4) {
+                Text(AppFormatter.currencySigned(platform.netResult, code: baseCurrency))
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(netResultColor)
                 if !isSameCurrency {
                     Text(AppFormatter.currency(platform.currentBalance, code: platform.displayCurrency))
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.appPrimary)
-                    Text(AppFormatter.currencySigned(platform.netResult) + " \(baseCurrency)")
                         .font(.caption)
-                        .foregroundColor(platform.netResult.profitColor)
-                } else {
-                    Text(AppFormatter.currencySigned(platform.netResult) + " \(baseCurrency)")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(platform.netResult.profitColor)
+                        .foregroundColor(.appSecondary)
                 }
             }
         }

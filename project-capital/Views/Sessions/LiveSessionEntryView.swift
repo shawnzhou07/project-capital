@@ -229,8 +229,8 @@ struct LiveSessionEntryView: View {
             HStack(spacing: 12) {
                 blindField(label: "SB", text: $smallBlind)
                 blindField(label: "BB", text: $bigBlind)
-                blindField(label: "Straddle", text: $straddle)
-                blindField(label: "Ante", text: $ante)
+                blindField(label: "3rd (Opt.)", text: $straddle)
+                blindField(label: "Ante (Opt.)", text: $ante)
             }
             .listRowBackground(Color.appSurface)
 
@@ -251,7 +251,7 @@ struct LiveSessionEntryView: View {
                 .foregroundColor(.appSecondary)
             TextField("0", text: text)
                 .keyboardType(.decimalPad)
-                .foregroundColor(.appGold)
+                .foregroundColor(.white)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 6)
@@ -282,7 +282,7 @@ struct LiveSessionEntryView: View {
                 TextField("0", text: $breakTimeStr)
                     .keyboardType(.numberPad)
                     .multilineTextAlignment(.trailing)
-                    .foregroundColor(.appGold)
+                    .foregroundColor(.white)
                     .frame(width: 80)
                     .onChange(of: breakTimeStr) { _, _ in autoSaveIfActive() }
             }
@@ -391,7 +391,7 @@ struct LiveSessionEntryView: View {
                     Spacer()
                     TextField("1.0000", text: $exchangeRateBuyInStr)
                         .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
-                        .foregroundColor(.appGold).frame(width: 90)
+                        .foregroundColor(.white).frame(width: 90)
                     Text("\(currency)/\(baseCurrency)").font(.caption).foregroundColor(.appSecondary)
                 }
                 .listRowBackground(Color.appSurface)
@@ -406,7 +406,7 @@ struct LiveSessionEntryView: View {
                     Spacer()
                     TextField("1.0000", text: $exchangeRateCashOutStr)
                         .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
-                        .foregroundColor(.appGold).frame(width: 90)
+                        .foregroundColor(.white).frame(width: 90)
                     Text("\(currency)/\(baseCurrency)").font(.caption).foregroundColor(.appSecondary)
                 }
                 .listRowBackground(Color.appSurface)
@@ -421,13 +421,13 @@ struct LiveSessionEntryView: View {
                 HStack {
                     Text("Amount (\(currency))").foregroundColor(.appPrimary)
                     Spacer()
-                    TextField("0", text: $buyIn).keyboardType(.decimalPad).multilineTextAlignment(.trailing).foregroundColor(.appGold).frame(width: 100)
+                    TextField("0", text: $buyIn).keyboardType(.decimalPad).multilineTextAlignment(.trailing).foregroundColor(.white).frame(width: 100)
                 }
                 .listRowBackground(Color.appSurface)
                 HStack {
                     Text("Equivalent (\(baseCurrency))").foregroundColor(.appPrimary)
                     Spacer()
-                    TextField("0", text: $buyInBaseStr).keyboardType(.decimalPad).multilineTextAlignment(.trailing).foregroundColor(.appGold).frame(width: 100)
+                    TextField("0", text: $buyInBaseStr).keyboardType(.decimalPad).multilineTextAlignment(.trailing).foregroundColor(.white).frame(width: 100)
                 }
                 .listRowBackground(Color.appSurface)
                 HStack {
@@ -441,13 +441,13 @@ struct LiveSessionEntryView: View {
                 HStack {
                     Text("Amount (\(currency))").foregroundColor(.appPrimary)
                     Spacer()
-                    TextField("0", text: $cashOut).keyboardType(.decimalPad).multilineTextAlignment(.trailing).foregroundColor(.appGold).frame(width: 100)
+                    TextField("0", text: $cashOut).keyboardType(.decimalPad).multilineTextAlignment(.trailing).foregroundColor(.white).frame(width: 100)
                 }
                 .listRowBackground(Color.appSurface)
                 HStack {
                     Text("Equivalent (\(baseCurrency))").foregroundColor(.appPrimary)
                     Spacer()
-                    TextField("0", text: $cashOutBaseStr).keyboardType(.decimalPad).multilineTextAlignment(.trailing).foregroundColor(.appGold).frame(width: 100)
+                    TextField("0", text: $cashOutBaseStr).keyboardType(.decimalPad).multilineTextAlignment(.trailing).foregroundColor(.white).frame(width: 100)
                 }
                 .listRowBackground(Color.appSurface)
                 HStack {
@@ -472,7 +472,7 @@ struct LiveSessionEntryView: View {
                 Spacer()
                 TextField("Auto (\(estimatedHands) est.)", text: $handsOverride)
                     .keyboardType(.numberPad).multilineTextAlignment(.trailing)
-                    .foregroundColor(.appGold).frame(width: 140)
+                    .foregroundColor(.white).frame(width: 140)
                     .onChange(of: handsOverride) { _, _ in autoSaveIfActive() }
             }
             .listRowBackground(Color.appSurface)

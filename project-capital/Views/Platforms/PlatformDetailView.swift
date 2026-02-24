@@ -44,6 +44,9 @@ struct PlatformDetailView: View {
                 loaded = true
             }
         }
+        .onChange(of: platform.currentBalance) { _, newBalance in
+            balanceStr = String(format: "%.2f", newBalance)
+        }
         .sheet(isPresented: $showDeposit) {
             DepositFormView(platform: platform)
         }
@@ -235,7 +238,7 @@ struct PlatformDetailView: View {
                     .cornerRadius(8)
             } else {
                 ForEach(platform.depositsArray.reversed()) { deposit in
-                    DepositRowView(deposit: deposit, platformCurrency: platform.displayCurrency)
+                    DepositRowView(deposit: deposit, platformCurrency: platform.displayCurrency, baseCurrency: baseCurrency)
                 }
             }
         }
@@ -364,6 +367,7 @@ struct PlatformDetailView: View {
 struct DepositRowView: View {
     let deposit: Deposit
     let platformCurrency: String
+    let baseCurrency: String
 
     var body: some View {
         HStack {
@@ -391,9 +395,9 @@ struct DepositRowView: View {
                     .font(.subheadline)
                     .fontWeight(.medium)
                     .foregroundColor(.appProfit)
-                Text("-\(AppFormatter.currency(deposit.amountSent))")
+                Text("-\(AppFormatter.currency(deposit.amountSent, code: baseCurrency))")
                     .font(.caption)
-                    .foregroundColor(.appSecondary)
+                    .foregroundColor(.appLoss)
             }
         }
         .padding()

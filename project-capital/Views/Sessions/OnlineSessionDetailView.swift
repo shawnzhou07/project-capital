@@ -72,7 +72,7 @@ struct OnlineSessionDetailView: View {
             Color.appBackground.ignoresSafeArea()
             if isVerified {
                 RoundedRectangle(cornerRadius: 0)
-                    .stroke(Color.appGold.opacity(0.4), lineWidth: 1)
+                    .stroke(Color.appGold.opacity(0.35), lineWidth: 2.0)
                     .ignoresSafeArea()
                     .allowsHitTesting(false)
                     .zIndex(999)
@@ -213,9 +213,18 @@ struct OnlineSessionDetailView: View {
     var headerSection: some View {
         Section {
             VStack(spacing: 8) {
-                Text(AppFormatter.currencySigned(session.netProfitLossBase))
-                    .font(.system(size: 36, weight: .bold))
-                    .foregroundColor(session.netProfitLossBase.profitColor)
+                HStack(spacing: 8) {
+                    if isVerified {
+                        Image(systemName: "lock.fill")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.appGold)
+                            .shadow(color: Color.appGold.opacity(0.6), radius: 6, x: 0, y: 0)
+                    }
+                    Text(AppFormatter.currencySigned(session.netProfitLossBase))
+                        .font(.system(size: 36, weight: .bold))
+                        .foregroundColor(session.netProfitLossBase.profitColor)
+                        .shadow(color: session.netProfitLossBase.profitColor.opacity(isVerified ? 0.5 : 0), radius: 8, x: 0, y: 0)
+                }
                 HStack(spacing: 16) {
                     Label(AppFormatter.duration(session.computedDuration), systemImage: "clock")
                     Label(AppFormatter.handsCount(session.effectiveHands) + " hands", systemImage: "suit.spade")
@@ -272,8 +281,8 @@ struct OnlineSessionDetailView: View {
             HStack(spacing: 12) {
                 blindField(label: "SB", text: $smallBlind)
                 blindField(label: "BB", text: $bigBlind)
-                blindField(label: "Straddle", text: $straddle)
-                blindField(label: "Ante", text: $ante)
+                blindField(label: "3rd (Opt.)", text: $straddle)
+                blindField(label: "Ante (Opt.)", text: $ante)
             }
             .listRowBackground(Color.appSurface)
 
@@ -292,7 +301,7 @@ struct OnlineSessionDetailView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(label).font(.caption2).foregroundColor(.appSecondary)
             TextField("0", text: text)
-                .keyboardType(.decimalPad).foregroundColor(.appGold)
+                .keyboardType(.decimalPad).foregroundColor(.white)
                 .multilineTextAlignment(.center).frame(maxWidth: .infinity)
                 .padding(.vertical, 6).background(Color.appSurface2).cornerRadius(6)
         }
@@ -313,7 +322,7 @@ struct OnlineSessionDetailView: View {
                 Spacer()
                 TextField("0", text: $breakTimeStr)
                     .keyboardType(.numberPad).multilineTextAlignment(.trailing)
-                    .foregroundColor(.appGold).frame(width: 80)
+                    .foregroundColor(.white).frame(width: 80)
             }
             .listRowBackground(Color.appSurface)
             HStack {
@@ -386,7 +395,7 @@ struct OnlineSessionDetailView: View {
                 Spacer()
                 TextField("Auto (\(estimatedHands) est.)", text: $handsOverride)
                     .keyboardType(.numberPad).multilineTextAlignment(.trailing)
-                    .foregroundColor(.appGold).frame(width: 140)
+                    .foregroundColor(.white).frame(width: 140)
             }
             .listRowBackground(Color.appSurface)
         } header: {
@@ -449,6 +458,7 @@ struct OnlineSessionDetailView: View {
 
     func verifySession() {
         session.isVerified = true
+        selectedPlatform?.currentBalance = session.balanceAfter
         autoSave()
     }
 
@@ -503,6 +513,7 @@ struct OnlineSessionDetailView: View {
         if !isVerified {
             session.balanceBefore = Double(balanceBefore) ?? 0
             session.balanceAfter = Double(balanceAfter) ?? 0
+            selectedPlatform?.currentBalance = Double(balanceAfter) ?? 0
         }
         session.exchangeRateToBase = selectedPlatform?.latestFXConversionRate ?? 1.0
         session.netProfitLoss = netPL

@@ -256,7 +256,7 @@ struct SessionsListView: View {
                     Color.appSurface
                     if s.isVerified {
                         RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color.appGold, lineWidth: 1.5)
+                            .stroke(Color.appGold.opacity(0.45), lineWidth: 1.5)
                     }
                 }
             )
@@ -283,7 +283,7 @@ struct SessionsListView: View {
                     Color.appSurface
                     if s.isVerified {
                         RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color.appGold, lineWidth: 1.5)
+                            .stroke(Color.appGold.opacity(0.45), lineWidth: 1.5)
                     }
                 }
             )
@@ -356,6 +356,7 @@ struct SessionRowView: View {
     var isUnverified: Bool = false
 
     @State private var elapsed: TimeInterval = 0
+    @State private var showUnverifiedInfoAlert = false
     let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
@@ -378,9 +379,19 @@ struct SessionRowView: View {
                         .foregroundColor(.appPrimary)
                         .lineLimit(1)
                     if isUnverified {
-                        Image(systemName: "questionmark.circle.fill")
-                            .font(.subheadline)
-                            .foregroundColor(.appSecondary)
+                        Button {
+                            showUnverifiedInfoAlert = true
+                        } label: {
+                            Image(systemName: "questionmark.circle.fill")
+                                .font(.subheadline)
+                                .foregroundColor(.appSecondary)
+                        }
+                        .buttonStyle(BorderlessButtonStyle())
+                        .alert("Unverified Session", isPresented: $showUnverifiedInfoAlert) {
+                            Button("OK", role: .cancel) {}
+                        } message: {
+                            Text("This session has not been verified. Verify your session to permanently lock the financial details and mark it as a truthful record.")
+                        }
                     }
                 }
                 Text(subtitle)

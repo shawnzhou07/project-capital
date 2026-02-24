@@ -141,8 +141,8 @@ struct OnlineSessionFormView: View {
             HStack(spacing: 12) {
                 blindField(label: "SB", text: $smallBlind)
                 blindField(label: "BB", text: $bigBlind)
-                blindField(label: "Straddle", text: $straddle)
-                blindField(label: "Ante", text: $ante)
+                blindField(label: "3rd (Opt.)", text: $straddle)
+                blindField(label: "Ante (Opt.)", text: $ante)
             }
             .listRowBackground(Color.appSurface)
 
@@ -166,7 +166,7 @@ struct OnlineSessionFormView: View {
                 .foregroundColor(.appSecondary)
             TextField("0", text: text)
                 .keyboardType(.decimalPad)
-                .foregroundColor(.appGold)
+                .foregroundColor(.white)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 6)
@@ -218,7 +218,7 @@ struct OnlineSessionFormView: View {
                 TextField("0", text: $breakTimeStr)
                     .keyboardType(.numberPad)
                     .multilineTextAlignment(.trailing)
-                    .foregroundColor(.appGold)
+                    .foregroundColor(.white)
                     .frame(width: 80)
             }
             .listRowBackground(Color.appSurface)
@@ -298,7 +298,7 @@ struct OnlineSessionFormView: View {
                 TextField("Auto (\(estimatedHands) est.)", text: $handsOverride)
                     .keyboardType(.numberPad)
                     .multilineTextAlignment(.trailing)
-                    .foregroundColor(.appGold)
+                    .foregroundColor(.white)
                     .frame(width: 140)
             }
             .listRowBackground(Color.appSurface)
