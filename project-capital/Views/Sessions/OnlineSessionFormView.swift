@@ -31,6 +31,7 @@ struct OnlineSessionFormView: View {
     @State private var notes = ""
     @State private var showPlatformPicker = false
     @State private var showTimeAlert = false
+    @State private var showZeroDurationAlert = false
 
     var breakTimeMinutes: Double { Double(breakTimeStr) ?? 0 }
 
@@ -40,9 +41,7 @@ struct OnlineSessionFormView: View {
     }
 
     var netPL: Double {
-        let before = Double(balanceBefore) ?? 0
-        let after = Double(balanceAfter) ?? 0
-        return after - before
+        (Double(balanceAfter) ?? 0) - (Double(balanceBefore) ?? 0)
     }
 
     var netPLBase: Double {
@@ -85,15 +84,31 @@ struct OnlineSessionFormView: View {
         .onAppear {
             if selectedPlatform == nil, let first = platforms.first {
                 selectedPlatform = first
+                autoFillBalanceBefore(from: first)
             }
             prevStartTime = startTime
             prevEndTime = endTime
+        }
+        .onChange(of: selectedPlatform) { _, newPlatform in
+            if let p = newPlatform {
+                autoFillBalanceBefore(from: p)
+            }
         }
         .alert("Invalid Time Range", isPresented: $showTimeAlert) {
             Button("OK", role: .cancel) {}
         } message: {
             Text("End time must be after start time.")
         }
+        .alert("Invalid Session Duration", isPresented: $showZeroDurationAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Start time and end time result in zero or negative duration. Please correct the session times before saving.")
+        }
+    }
+
+    func autoFillBalanceBefore(from platform: Platform) {
+        let bal = platform.currentBalance
+        balanceBefore = bal == 0 ? "" : String(format: "%.2f", bal)
     }
 
     var platformSection: some View {
@@ -108,10 +123,8 @@ struct OnlineSessionFormView: View {
                     Text(selectedPlatform?.displayName ?? "Select...")
                         .foregroundColor(selectedPlatform == nil ? .appSecondary : .appGold)
                     if selectedPlatform != nil {
-                        Text("·")
-                            .foregroundColor(.appSecondary)
-                        Text(platformCurrency)
-                            .foregroundColor(.appSecondary)
+                        Text("·").foregroundColor(.appSecondary)
+                        Text(platformCurrency).foregroundColor(.appSecondary)
                     }
                     Image(systemName: "chevron.right")
                         .font(.caption)
@@ -119,7 +132,6 @@ struct OnlineSessionFormView: View {
                 }
             }
             .listRowBackground(Color.appSurface)
-
         } header: {
             Text("Platform").foregroundColor(.appGold).textCase(nil)
         }
@@ -141,8 +153,8 @@ struct OnlineSessionFormView: View {
             HStack(spacing: 12) {
                 blindField(label: "SB", text: $smallBlind)
                 blindField(label: "BB", text: $bigBlind)
-                blindField(label: "3rd (Opt.)", text: $straddle)
-                blindField(label: "Ante (Opt.)", text: $ante)
+                blindField(label: "STR (opt.)", text: $straddle)
+                blindField(label: "Ante (opt.)", text: $ante)
             }
             .listRowBackground(Color.appSurface)
 
@@ -164,10 +176,7 @@ struct OnlineSessionFormView: View {
             Text(label)
                 .font(.caption2)
                 .foregroundColor(.appSecondary)
-            TextField("0", text: text)
-                .keyboardType(.decimalPad)
-                .foregroundColor(.white)
-                .multilineTextAlignment(.center)
+            CurrencyInputField(text: text, width: nil, textAlignment: .center)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 6)
                 .background(Color.appSurface2)
@@ -215,11 +224,7 @@ struct OnlineSessionFormView: View {
                 Text("Break (min)")
                     .foregroundColor(.appPrimary)
                 Spacer()
-                TextField("0", text: $breakTimeStr)
-                    .keyboardType(.numberPad)
-                    .multilineTextAlignment(.trailing)
-                    .foregroundColor(.white)
-                    .frame(width: 80)
+                CurrencyInputField(text: $breakTimeStr, width: 80, maxDecimalPlaces: 0)
             }
             .listRowBackground(Color.appSurface)
 
@@ -245,11 +250,7 @@ struct OnlineSessionFormView: View {
                 Text(platformCurrency)
                     .font(.caption)
                     .foregroundColor(.appSecondary)
-                TextField("0", text: $balanceBefore)
-                    .keyboardType(.decimalPad)
-                    .multilineTextAlignment(.trailing)
-                    .foregroundColor(.appPrimary)
-                    .frame(width: 100)
+                CurrencyInputField(text: $balanceBefore, width: 100)
             }
             .listRowBackground(Color.appSurface)
 
@@ -260,11 +261,7 @@ struct OnlineSessionFormView: View {
                 Text(platformCurrency)
                     .font(.caption)
                     .foregroundColor(.appSecondary)
-                TextField("0", text: $balanceAfter)
-                    .keyboardType(.decimalPad)
-                    .multilineTextAlignment(.trailing)
-                    .foregroundColor(.appPrimary)
-                    .frame(width: 100)
+                CurrencyInputField(text: $balanceAfter, width: 100)
             }
             .listRowBackground(Color.appSurface)
 
@@ -341,6 +338,8 @@ struct OnlineSessionFormView: View {
             if endTime <= startTime { showTimeAlert = true }
             return
         }
+        guard duration > 0 else { showZeroDurationAlert = true; return }
+
         let session = OnlineCash(context: viewContext)
         session.id = UUID()
         session.platform = platform

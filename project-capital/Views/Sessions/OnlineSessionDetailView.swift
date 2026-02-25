@@ -16,6 +16,7 @@ struct OnlineSessionDetailView: View {
     @State private var showDeleteAlert = false
     @State private var showVerifyAlert = false
     @State private var showTimeAlert = false
+    @State private var showZeroDurationAlert = false
     @Environment(\.dismiss) private var dismiss
 
     @State private var gameType = ""
@@ -58,9 +59,7 @@ struct OnlineSessionDetailView: View {
     }
     var isVerified: Bool { session.isVerified }
     var canVerify: Bool {
-        selectedPlatform != nil &&
-        !gameType.isEmpty &&
-        sbDouble > 0 && bbDouble > 0
+        selectedPlatform != nil && !gameType.isEmpty && sbDouble > 0 && bbDouble > 0
     }
 
     var body: some View {
@@ -87,9 +86,7 @@ struct OnlineSessionDetailView: View {
                     balanceSection
                     handsSection
                     notesSection
-                    if !isVerified {
-                        deleteSection
-                    }
+                    if !isVerified { deleteSection }
                 }
                 .scrollContentBackground(.hidden)
                 .background(Color.appBackground)
@@ -147,6 +144,11 @@ struct OnlineSessionDetailView: View {
             } message: {
                 Text("End time must be after start time.")
             }
+            .alert("Invalid Session Duration", isPresented: $showZeroDurationAlert) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("Start time and end time result in zero or negative duration. Please correct the session times before saving.")
+            }
             .alert("Delete Session?", isPresented: $showDeleteAlert) {
                 Button("Delete", role: .destructive) {
                     viewContext.delete(session)
@@ -158,7 +160,7 @@ struct OnlineSessionDetailView: View {
                 Text("This cannot be undone.")
             }
             .alert("Verify Session?", isPresented: $showVerifyAlert) {
-                Button("Verify") { verifySession() }
+                Button("Verify") { tryVerifySession() }
                     .foregroundStyle(Color.appGold)
                 Button("Cancel", role: .cancel) {}
             } message: {
@@ -245,13 +247,11 @@ struct OnlineSessionDetailView: View {
         .listRowBackground(Color.appSurface)
     }
 
-    // MARK: - Platform (always editable)
+    // MARK: - Platform
 
     var platformSection: some View {
         Section {
-            Button {
-                showPlatformPicker = true
-            } label: {
+            Button { showPlatformPicker = true } label: {
                 HStack {
                     Text("Platform").foregroundColor(.appPrimary)
                     Spacer()
@@ -262,13 +262,12 @@ struct OnlineSessionDetailView: View {
                 }
             }
             .listRowBackground(Color.appSurface)
-
         } header: {
             Text("Platform").foregroundColor(.appGold).textCase(nil)
         }
     }
 
-    // MARK: - Game Details (always editable)
+    // MARK: - Game Details
 
     var gameDetailsSection: some View {
         Section {
@@ -281,8 +280,8 @@ struct OnlineSessionDetailView: View {
             HStack(spacing: 12) {
                 blindField(label: "SB", text: $smallBlind)
                 blindField(label: "BB", text: $bigBlind)
-                blindField(label: "3rd (Opt.)", text: $straddle)
-                blindField(label: "Ante (Opt.)", text: $ante)
+                blindField(label: "STR (opt.)", text: $straddle)
+                blindField(label: "Ante (opt.)", text: $ante)
             }
             .listRowBackground(Color.appSurface)
 
@@ -300,14 +299,15 @@ struct OnlineSessionDetailView: View {
     func blindField(label: String, text: Binding<String>) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(label).font(.caption2).foregroundColor(.appSecondary)
-            TextField("0", text: text)
-                .keyboardType(.decimalPad).foregroundColor(.white)
-                .multilineTextAlignment(.center).frame(maxWidth: .infinity)
-                .padding(.vertical, 6).background(Color.appSurface2).cornerRadius(6)
+            CurrencyInputField(text: text, width: nil, textAlignment: .center)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
+                .background(Color.appSurface2)
+                .cornerRadius(6)
         }
     }
 
-    // MARK: - Timing (always editable)
+    // MARK: - Timing
 
     var timingSection: some View {
         Section {
@@ -320,9 +320,7 @@ struct OnlineSessionDetailView: View {
             HStack {
                 Text("Break (min)").foregroundColor(.appPrimary)
                 Spacer()
-                TextField("0", text: $breakTimeStr)
-                    .keyboardType(.numberPad).multilineTextAlignment(.trailing)
-                    .foregroundColor(.white).frame(width: 80)
+                CurrencyInputField(text: $breakTimeStr, width: 80, maxDecimalPlaces: 0)
             }
             .listRowBackground(Color.appSurface)
             HStack {
@@ -347,9 +345,7 @@ struct OnlineSessionDetailView: View {
                     Text("Balance Before").foregroundColor(.appPrimary)
                     Spacer()
                     Text(platformCurrency).font(.caption).foregroundColor(.appSecondary)
-                    TextField("0", text: $balanceBefore)
-                        .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
-                        .foregroundColor(.appPrimary).frame(width: 100)
+                    CurrencyInputField(text: $balanceBefore, width: 100)
                 }
                 .listRowBackground(Color.appSurface)
             }
@@ -361,22 +357,39 @@ struct OnlineSessionDetailView: View {
                     Text("Balance After").foregroundColor(.appPrimary)
                     Spacer()
                     Text(platformCurrency).font(.caption).foregroundColor(.appSecondary)
-                    TextField("0", text: $balanceAfter)
-                        .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
-                        .foregroundColor(.appPrimary).frame(width: 100)
+                    CurrencyInputField(text: $balanceAfter, width: 100)
                 }
                 .listRowBackground(Color.appSurface)
             }
 
+            // Net Result row — gold lock + glow when verified
             HStack {
+                if isVerified {
+                    Image(systemName: "lock.fill")
+                        .font(.caption)
+                        .foregroundColor(.appGold)
+                        .shadow(color: Color.appGold.opacity(0.8), radius: 4, x: 0, y: 0)
+                }
                 Text("Net Result").foregroundColor(.appPrimary)
                 Spacer()
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text(AppFormatter.currencySigned(netPL, code: platformCurrency))
-                        .fontWeight(.semibold).foregroundColor(netPL.profitColor)
+                    let netToShow = isVerified ? session.netProfitLoss : netPL
+                    let netBaseToShow = isVerified ? session.netProfitLossBase : netPLBase
+                    Text(AppFormatter.currencySigned(netToShow, code: platformCurrency))
+                        .fontWeight(.semibold)
+                        .foregroundColor(netToShow.profitColor)
+                        .shadow(
+                            color: isVerified ? netToShow.profitColor.opacity(0.8) : .clear,
+                            radius: 8, x: 0, y: 0
+                        )
                     if !isSameCurrency {
-                        Text(AppFormatter.currencySigned(netPLBase, code: baseCurrency))
-                            .font(.caption).foregroundColor(netPLBase.profitColor)
+                        Text(AppFormatter.currencySigned(netBaseToShow, code: baseCurrency))
+                            .font(.caption)
+                            .foregroundColor(netBaseToShow.profitColor)
+                            .shadow(
+                                color: isVerified ? netBaseToShow.profitColor.opacity(0.8) : .clear,
+                                radius: 8, x: 0, y: 0
+                            )
                     }
                 }
             }
@@ -386,7 +399,7 @@ struct OnlineSessionDetailView: View {
         }
     }
 
-    // MARK: - Hands (always editable)
+    // MARK: - Hands
 
     var handsSection: some View {
         Section {
@@ -403,7 +416,7 @@ struct OnlineSessionDetailView: View {
         }
     }
 
-    // MARK: - Notes (always editable)
+    // MARK: - Notes
 
     var notesSection: some View {
         Section {
@@ -449,11 +462,14 @@ struct OnlineSessionDetailView: View {
         .listRowBackground(Color.appSurface)
     }
 
-    // MARK: - Helpers
-
     func triggerLockHaptic() {
         let generator = UIImpactFeedbackGenerator(style: .rigid)
         generator.impactOccurred()
+    }
+
+    func tryVerifySession() {
+        guard duration > 0 else { showZeroDurationAlert = true; return }
+        verifySession()
     }
 
     func verifySession() {
@@ -486,8 +502,8 @@ struct OnlineSessionDetailView: View {
         endTime = session.endTime ?? Date()
         prevStartTime = startTime
         prevEndTime = endTime
-        balanceBefore = String(format: "%.2f", session.balanceBefore)
-        balanceAfter = String(format: "%.2f", session.balanceAfter)
+        balanceBefore = session.balanceBefore == 0 ? "" : String(format: "%.2f", session.balanceBefore)
+        balanceAfter = session.balanceAfter == 0 ? "" : String(format: "%.2f", session.balanceAfter)
         handsOverride = session.handsCount > 0 ? "\(session.handsCount)" : ""
         notes = session.notes ?? ""
         selectedPlatform = session.platform

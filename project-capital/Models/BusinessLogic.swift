@@ -57,10 +57,16 @@ extension Platform {
         return totalWithdrawn + currentValueBase - totalDeposited + totalAdjustments
     }
 
+    // Net result in platform currency — fully independent formula using platform-native amounts.
+    // deposit.amountReceived and withdrawal.amountRequested are always in platform currency.
     var netResultInPlatformCurrency: Double {
+        guard !depositsArray.isEmpty || !withdrawalsArray.isEmpty else { return 0 }
+        let totalDepPlatform = depositsArray.reduce(0) { $0 + $1.amountReceived }
+        let totalWdPlatform = withdrawalsArray.reduce(0) { $0 + $1.amountRequested }
+        // Convert adjustments (stored in base) back to platform currency using latest rate
         let rate = latestFXConversionRate
-        guard rate > 0 else { return netResult }
-        return netResult / rate
+        let adjPlatform = rate > 0 ? totalAdjustments / rate : 0
+        return totalWdPlatform + currentBalance - totalDepPlatform + adjPlatform
     }
 
     var displayName: String { name ?? "Unknown Platform" }

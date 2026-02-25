@@ -114,9 +114,8 @@ struct PlatformRowView: View {
 
     var isSameCurrency: Bool { platform.displayCurrency == baseCurrency }
 
-    // White for zero or positive, red for negative — never green
     var netResultColor: Color {
-        platform.netResult < 0 ? .appLoss : .appPrimary
+        platform.netResult.profitColor
     }
 
     var body: some View {

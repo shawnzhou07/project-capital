@@ -10,7 +10,7 @@ struct LiveSessionFormView: View {
 
     @State private var location = ""
     @State private var currency = "CAD"
-    @State private var exchangeRate = "1.0000"
+    @State private var exchangeRate = ""
     @State private var gameType = "No Limit Hold'em"
     @State private var smallBlind = ""
     @State private var bigBlind = ""
@@ -28,6 +28,7 @@ struct LiveSessionFormView: View {
     @State private var handsOverride = ""
     @State private var notes = ""
     @State private var showTimeAlert = false
+    @State private var showZeroDurationAlert = false
 
     var breakTimeMinutes: Double { Double(breakTimeStr) ?? 0 }
 
@@ -42,7 +43,8 @@ struct LiveSessionFormView: View {
     }
 
     var netPLBase: Double {
-        netPL * (Double(exchangeRate) ?? 1.0)
+        let rate = Double(exchangeRate) ?? 1.0
+        return netPL * (isSameCurrency ? 1.0 : rate)
     }
 
     var isSameCurrency: Bool { currency == baseCurrency }
@@ -81,6 +83,11 @@ struct LiveSessionFormView: View {
         } message: {
             Text("End time must be after start time.")
         }
+        .alert("Invalid Session Duration", isPresented: $showZeroDurationAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Start time and end time result in zero or negative duration. Please correct the session times before saving.")
+        }
     }
 
     var locationSection: some View {
@@ -111,11 +118,7 @@ struct LiveSessionFormView: View {
                     Text("Exchange Rate")
                         .foregroundColor(.appPrimary)
                     Spacer()
-                    TextField("1.0000", text: $exchangeRate)
-                        .keyboardType(.decimalPad)
-                        .multilineTextAlignment(.trailing)
-                        .foregroundColor(.white)
-                        .frame(width: 100)
+                    CurrencyInputField(text: $exchangeRate, width: 100, maxDecimalPlaces: 4)
                     Text("\(currency)/\(baseCurrency)")
                         .font(.caption)
                         .foregroundColor(.appSecondary)
@@ -138,8 +141,8 @@ struct LiveSessionFormView: View {
             HStack(spacing: 12) {
                 blindField(label: "SB", text: $smallBlind)
                 blindField(label: "BB", text: $bigBlind)
-                blindField(label: "3rd (Opt.)", text: $straddle)
-                blindField(label: "Ante (Opt.)", text: $ante)
+                blindField(label: "STR (opt.)", text: $straddle)
+                blindField(label: "Ante (opt.)", text: $ante)
             }
             .listRowBackground(Color.appSurface)
 
@@ -157,10 +160,7 @@ struct LiveSessionFormView: View {
             Text(label)
                 .font(.caption2)
                 .foregroundColor(.appSecondary)
-            TextField("0", text: text)
-                .keyboardType(.decimalPad)
-                .foregroundColor(.white)
-                .multilineTextAlignment(.center)
+            CurrencyInputField(text: text, width: nil, textAlignment: .center)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 6)
                 .background(Color.appSurface2)
@@ -209,11 +209,7 @@ struct LiveSessionFormView: View {
                 Text("Break (min)")
                     .foregroundColor(.appPrimary)
                 Spacer()
-                TextField("0", text: $breakTimeStr)
-                    .keyboardType(.numberPad)
-                    .multilineTextAlignment(.trailing)
-                    .foregroundColor(.white)
-                    .frame(width: 80)
+                CurrencyInputField(text: $breakTimeStr, width: 80, maxDecimalPlaces: 0)
             }
             .listRowBackground(Color.appSurface)
 
@@ -239,11 +235,7 @@ struct LiveSessionFormView: View {
                 Text(currency)
                     .font(.caption)
                     .foregroundColor(.appSecondary)
-                TextField("0", text: $buyIn)
-                    .keyboardType(.decimalPad)
-                    .multilineTextAlignment(.trailing)
-                    .foregroundColor(.appPrimary)
-                    .frame(width: 100)
+                CurrencyInputField(text: $buyIn, width: 100)
             }
             .listRowBackground(Color.appSurface)
 
@@ -254,11 +246,7 @@ struct LiveSessionFormView: View {
                 Text(currency)
                     .font(.caption)
                     .foregroundColor(.appSecondary)
-                TextField("0", text: $cashOut)
-                    .keyboardType(.decimalPad)
-                    .multilineTextAlignment(.trailing)
-                    .foregroundColor(.appPrimary)
-                    .frame(width: 100)
+                CurrencyInputField(text: $cashOut, width: 100)
             }
             .listRowBackground(Color.appSurface)
 
@@ -269,11 +257,7 @@ struct LiveSessionFormView: View {
                 Text(currency)
                     .font(.caption)
                     .foregroundColor(.appSecondary)
-                TextField("0", text: $tips)
-                    .keyboardType(.decimalPad)
-                    .multilineTextAlignment(.trailing)
-                    .foregroundColor(.appPrimary)
-                    .frame(width: 100)
+                CurrencyInputField(text: $tips, width: 100)
             }
             .listRowBackground(Color.appSurface)
 
@@ -352,14 +336,16 @@ struct LiveSessionFormView: View {
 
     func saveSession() {
         guard endTime > startTime else { showTimeAlert = true; return }
+        guard duration > 0 else { showZeroDurationAlert = true; return }
+
         let session = LiveCash(context: viewContext)
         session.id = UUID()
         session.location = location
         session.currency = currency
         let rate = Double(exchangeRate) ?? 1.0
-        session.exchangeRateToBase = rate
-        session.exchangeRateBuyIn = rate
-        session.exchangeRateCashOut = rate
+        session.exchangeRateToBase = isSameCurrency ? 1.0 : rate
+        session.exchangeRateBuyIn = isSameCurrency ? 1.0 : rate
+        session.exchangeRateCashOut = isSameCurrency ? 1.0 : rate
         session.gameType = gameType
         session.smallBlind = sbDouble
         session.bigBlind = bbDouble

@@ -12,7 +12,6 @@ struct OnlineSessionEntryView: View {
         animation: .default
     ) private var platforms: FetchedResults<Platform>
 
-    // Optional: passed when re-expanding from floating bar
     var existingSession: OnlineCash? = nil
 
     enum EntryState { case preStart, active, stopped }
@@ -20,11 +19,9 @@ struct OnlineSessionEntryView: View {
     @State private var entryState: EntryState = .preStart
     @State private var coreDataSession: OnlineCash? = nil
 
-    // Timing state vars
     @State private var startTime = Date()
     @State private var endTime = Date()
 
-    // Form fields
     @State private var selectedPlatform: Platform? = nil
     @State private var gameType = "No Limit Hold'em"
     @State private var smallBlind = ""
@@ -42,18 +39,17 @@ struct OnlineSessionEntryView: View {
     @State private var showDiscardAlert = false
     @State private var showRequiredFieldsAlert = false
     @State private var showPlatformPicker = false
+    @State private var showZeroDurationAlert = false
     @State private var tick = Date()
     let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     // Balance discrepancy
-    @FocusState private var balanceBeforeFocused: Bool
     @State private var showBalanceDiscrepancy = false
-    @State private var hasUnresolvedDiscrepancy = false
     @State private var discrepancyEnteredBalance: Double = 0
     @State private var discrepancyRecordedBalance: Double = 0
-    @State private var intendedBalance: Double = 0
+    @State private var discrepancyDirection: DiscrepancyDirection = .higher
 
-    // MARK: - Computed
+    enum DiscrepancyDirection { case higher, lower }
 
     var platformCurrency: String { selectedPlatform?.displayCurrency ?? "USD" }
     var isSameCurrency: Bool { platformCurrency == baseCurrency }
@@ -88,13 +84,11 @@ struct OnlineSessionEntryView: View {
         return "\(h)h \(m)m"
     }
 
-    var isValidForSave: Bool { selectedPlatform != nil && sbDouble > 0 && bbDouble > 0 && !hasUnresolvedDiscrepancy }
+    var isValidForSave: Bool { selectedPlatform != nil && sbDouble > 0 && bbDouble > 0 }
 
     var hasData: Bool {
         selectedPlatform != nil || sbDouble > 0 || bbDouble > 0 || !balanceBefore.isEmpty || !balanceAfter.isEmpty || !notes.isEmpty
     }
-
-    // MARK: - Body
 
     var body: some View {
         configuredForm
@@ -109,9 +103,23 @@ struct OnlineSessionEntryView: View {
             } message: {
                 Text("Please select a platform and fill in SB and BB before saving.")
             }
-            .alert("Balance Discrepancy Detected", isPresented: $showBalanceDiscrepancy) {
-                Button("Go to Deposits") { coordinator.dismissForm() }
-                Button("Go to Adjustments") { coordinator.dismissForm() }
+            .alert("Invalid Session Duration", isPresented: $showZeroDurationAlert) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("Start time and end time result in zero or negative duration. Please correct the session times before saving.")
+            }
+            .alert(discrepancyAlertTitle, isPresented: $showBalanceDiscrepancy) {
+                if discrepancyDirection == .higher {
+                    Button("Add Deposit") { coordinator.dismissForm() }
+                    Button("Log Adjustment") { coordinator.dismissForm() }
+                } else {
+                    Button("Record Withdrawal") { coordinator.dismissForm() }
+                    Button("Log Adjustment") { coordinator.dismissForm() }
+                }
+                Button("OK", role: .cancel) {
+                    let recorded = selectedPlatform?.currentBalance ?? 0
+                    balanceBefore = recorded == 0 ? "" : String(format: "%.2f", recorded)
+                }
             } message: {
                 Text(discrepancyAlertMessage)
             }
@@ -120,19 +128,32 @@ struct OnlineSessionEntryView: View {
                     loadFromExisting(session)
                 } else if selectedPlatform == nil, let first = platforms.first {
                     selectedPlatform = first
+                    autoFillBalanceBefore(from: first)
                 }
             }
-            .onChange(of: balanceBeforeFocused) { _, isFocused in
-                if !isFocused { checkBalanceDiscrepancy() }
-            }
-            .onChange(of: selectedPlatform?.currentBalance) { _, newBalance in
-                guard hasUnresolvedDiscrepancy, let newBal = newBalance else { return }
-                if abs(newBal - intendedBalance) <= 0.01 {
-                    hasUnresolvedDiscrepancy = false
-                    balanceBefore = intendedBalance == 0 ? "" : String(format: "%.2f", intendedBalance)
+            .onChange(of: selectedPlatform) { _, newPlatform in
+                if let p = newPlatform, entryState == .preStart {
+                    autoFillBalanceBefore(from: p)
                 }
             }
             .onReceive(timer) { t in if entryState == .active { tick = t } }
+    }
+
+    func autoFillBalanceBefore(from platform: Platform) {
+        let bal = platform.currentBalance
+        balanceBefore = bal == 0 ? "" : String(format: "%.2f", bal)
+    }
+
+    var discrepancyAlertTitle: String { "Balance Discrepancy" }
+
+    var discrepancyAlertMessage: String {
+        let entered = AppFormatter.currency(discrepancyEnteredBalance, code: platformCurrency)
+        let recorded = AppFormatter.currency(discrepancyRecordedBalance, code: platformCurrency)
+        if discrepancyDirection == .higher {
+            return "You entered \(entered) but the platform balance is \(recorded). It appears funds are missing from the record. Would you like to add a deposit or log an adjustment?"
+        } else {
+            return "You entered \(entered) but the platform balance is \(recorded). It appears there are extra funds in the record. Would you like to record a withdrawal or log an adjustment?"
+        }
     }
 
     private var configuredForm: some View {
@@ -164,25 +185,16 @@ struct OnlineSessionEntryView: View {
     private var trailingToolbarButton: some View {
         if entryState == .preStart {
             Button("Start") { handleStart() }
-                .fontWeight(.semibold)
-                .foregroundColor(.appGold)
+                .fontWeight(.semibold).foregroundColor(.appGold)
         } else if entryState == .active {
             Button("Stop") { handleStop() }
-                .fontWeight(.semibold)
-                .foregroundColor(.appLoss)
+                .fontWeight(.semibold).foregroundColor(.appLoss)
         } else if entryState == .stopped {
             Button("Save") {
-                if isValidForSave { saveFinal() } else { showRequiredFieldsAlert = true }
+                if isValidForSave { trySaveFinal() } else { showRequiredFieldsAlert = true }
             }
-            .fontWeight(.semibold)
-            .foregroundColor(.appGold)
+            .fontWeight(.semibold).foregroundColor(.appGold)
         }
-    }
-
-    private var discrepancyAlertMessage: String {
-        let entered = AppFormatter.currency(discrepancyEnteredBalance, code: platformCurrency)
-        let recorded = AppFormatter.currency(discrepancyRecordedBalance, code: platformCurrency)
-        return "Your entered balance (\(entered)) does not match the recorded platform balance (\(recorded)). You must resolve this before proceeding."
     }
 
     @ViewBuilder
@@ -209,9 +221,7 @@ struct OnlineSessionEntryView: View {
 
     var platformSection: some View {
         Section {
-            Button {
-                showPlatformPicker = true
-            } label: {
+            Button { showPlatformPicker = true } label: {
                 HStack {
                     Text("Platform").foregroundColor(.appPrimary)
                     Spacer()
@@ -248,10 +258,14 @@ struct OnlineSessionEntryView: View {
             HStack(spacing: 12) {
                 blindField(label: "SB", text: $smallBlind)
                 blindField(label: "BB", text: $bigBlind)
-                blindField(label: "3rd (Opt.)", text: $straddle)
-                blindField(label: "Ante (Opt.)", text: $ante)
+                blindField(label: "STR (opt.)", text: $straddle)
+                blindField(label: "Ante (opt.)", text: $ante)
             }
             .listRowBackground(Color.appSurface)
+            .onChange(of: smallBlind) { _, _ in autoSaveIfActive() }
+            .onChange(of: bigBlind) { _, _ in autoSaveIfActive() }
+            .onChange(of: straddle) { _, _ in autoSaveIfActive() }
+            .onChange(of: ante) { _, _ in autoSaveIfActive() }
 
             Stepper("Table Size: \(tableSize)", value: $tableSize, in: 2...10)
                 .foregroundColor(.appPrimary)
@@ -273,15 +287,11 @@ struct OnlineSessionEntryView: View {
             Text(label)
                 .font(.caption2)
                 .foregroundColor(.appSecondary)
-            TextField("0", text: text)
-                .keyboardType(.decimalPad)
-                .foregroundColor(.white)
-                .multilineTextAlignment(.center)
+            CurrencyInputField(text: text, width: nil, textAlignment: .center)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 6)
                 .background(Color.appSurface2)
                 .cornerRadius(6)
-                .onChange(of: text.wrappedValue) { _, _ in autoSaveIfActive() }
         }
     }
 
@@ -301,11 +311,7 @@ struct OnlineSessionEntryView: View {
             HStack {
                 Text("Break (min)").foregroundColor(.appPrimary)
                 Spacer()
-                TextField("0", text: $breakTimeStr)
-                    .keyboardType(.numberPad)
-                    .multilineTextAlignment(.trailing)
-                    .foregroundColor(.white)
-                    .frame(width: 80)
+                CurrencyInputField(text: $breakTimeStr, width: 80, maxDecimalPlaces: 0)
                     .onChange(of: breakTimeStr) { _, _ in autoSaveIfActive() }
             }
             .listRowBackground(Color.appSurface)
@@ -336,13 +342,14 @@ struct OnlineSessionEntryView: View {
                 Text("Balance Before").foregroundColor(.appPrimary)
                 Spacer()
                 Text(platformCurrency).font(.caption).foregroundColor(.appSecondary)
-                TextField("0", text: $balanceBefore)
-                    .keyboardType(.decimalPad)
-                    .multilineTextAlignment(.trailing)
-                    .foregroundColor(.appPrimary)
-                    .frame(width: 100)
-                    .focused($balanceBeforeFocused)
-                    .onChange(of: balanceBefore) { _, _ in autoSaveIfActive() }
+                CurrencyInputField(
+                    text: $balanceBefore,
+                    width: 100,
+                    onFocusChange: { focused in
+                        if !focused { checkBalanceDiscrepancy() }
+                        autoSaveIfActive()
+                    }
+                )
             }
             .listRowBackground(Color.appSurface)
 
@@ -350,11 +357,7 @@ struct OnlineSessionEntryView: View {
                 Text("Balance After").foregroundColor(.appPrimary)
                 Spacer()
                 Text(platformCurrency).font(.caption).foregroundColor(.appSecondary)
-                TextField("0", text: $balanceAfter)
-                    .keyboardType(.decimalPad)
-                    .multilineTextAlignment(.trailing)
-                    .foregroundColor(.appPrimary)
-                    .frame(width: 100)
+                CurrencyInputField(text: $balanceAfter, width: 100)
                     .onChange(of: balanceAfter) { _, _ in autoSaveIfActive() }
             }
             .listRowBackground(Color.appSurface)
@@ -445,6 +448,11 @@ struct OnlineSessionEntryView: View {
         } catch { print("Stop error: \(error)") }
     }
 
+    func trySaveFinal() {
+        guard sessionDurationHours > 0 else { showZeroDurationAlert = true; return }
+        saveFinal()
+    }
+
     func saveFinal() {
         guard let session = coreDataSession, let platform = selectedPlatform else { return }
         session.platform = platform
@@ -504,17 +512,12 @@ struct OnlineSessionEntryView: View {
         guard let platform = selectedPlatform else { return }
         let entered = Double(balanceBefore) ?? 0
         let recorded = platform.currentBalance
-        if abs(entered - recorded) > 0.01 {
-            intendedBalance = entered
-            discrepancyEnteredBalance = entered
-            discrepancyRecordedBalance = recorded
-            // Revert the field to the recorded balance immediately
-            balanceBefore = recorded == 0 ? "" : String(format: "%.2f", recorded)
-            hasUnresolvedDiscrepancy = true
-            showBalanceDiscrepancy = true
-        } else {
-            hasUnresolvedDiscrepancy = false
-        }
+        guard abs(entered - recorded) > 0.01 else { return }
+
+        discrepancyEnteredBalance = entered
+        discrepancyRecordedBalance = recorded
+        discrepancyDirection = entered > recorded ? .higher : .lower
+        showBalanceDiscrepancy = true
     }
 
     func loadFromExisting(_ session: OnlineCash) {

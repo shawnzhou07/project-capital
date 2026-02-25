@@ -262,7 +262,7 @@ struct PlatformDetailView: View {
                     .cornerRadius(8)
             } else {
                 ForEach(platform.withdrawalsArray.reversed()) { withdrawal in
-                    WithdrawalRowView(withdrawal: withdrawal, platformCurrency: platform.displayCurrency)
+                    WithdrawalRowView(withdrawal: withdrawal, platformCurrency: platform.displayCurrency, baseCurrency: baseCurrency)
                 }
             }
         }
@@ -409,6 +409,7 @@ struct DepositRowView: View {
 struct WithdrawalRowView: View {
     let withdrawal: Withdrawal
     let platformCurrency: String
+    let baseCurrency: String
 
     var body: some View {
         HStack {
@@ -436,9 +437,9 @@ struct WithdrawalRowView: View {
                     .font(.subheadline)
                     .fontWeight(.medium)
                     .foregroundColor(.appLoss)
-                Text("+\(AppFormatter.currency(withdrawal.amountReceived))")
+                Text("+\(AppFormatter.currency(withdrawal.amountReceived, code: baseCurrency))")
                     .font(.caption)
-                    .foregroundColor(.appSecondary)
+                    .foregroundColor(.appProfit)
             }
         }
         .padding()

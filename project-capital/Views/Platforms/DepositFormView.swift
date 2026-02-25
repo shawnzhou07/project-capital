@@ -99,27 +99,19 @@ struct DepositFormView: View {
             HStack {
                 Text(sentLabel).foregroundColor(.appPrimary)
                 Spacer()
-                TextField("0.00", text: $amountSent)
-                    .keyboardType(.decimalPad)
-                    .multilineTextAlignment(.trailing)
-                    .foregroundColor(.appPrimary)
-                    .frame(width: 120)
-                    .onChange(of: amountSent) { _, _ in recalcRate() }
+                CurrencyInputField(text: $amountSent, width: 120)
             }
             .listRowBackground(Color.appSurface)
+            .onChange(of: amountSent) { _, _ in recalcRate() }
 
             // Amount Received
             HStack {
                 Text(receivedLabel).foregroundColor(.appPrimary)
                 Spacer()
-                TextField("0.00", text: $amountReceived)
-                    .keyboardType(.decimalPad)
-                    .multilineTextAlignment(.trailing)
-                    .foregroundColor(.appPrimary)
-                    .frame(width: 120)
-                    .onChange(of: amountReceived) { _, _ in recalcRate() }
+                CurrencyInputField(text: $amountReceived, width: 120)
             }
             .listRowBackground(Color.appSurface)
+            .onChange(of: amountReceived) { _, _ in recalcRate() }
 
             if !isSameCurrency {
                 Toggle(isOn: $isForeignExchange) {
@@ -133,11 +125,7 @@ struct DepositFormView: View {
                     HStack {
                         Text("Effective Rate").foregroundColor(.appSecondary)
                         Spacer()
-                        TextField("0.0000", text: $effectiveRateStr)
-                            .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.trailing)
-                            .foregroundColor(.appGold)
-                            .frame(width: 90)
+                        CurrencyInputField(text: $effectiveRateStr, width: 90, maxDecimalPlaces: 4, textColor: .appGold)
                         Text("\(platform.displayCurrency)/\(baseCurrency)")
                             .font(.caption).foregroundColor(.appSecondary)
                     }

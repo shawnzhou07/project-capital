@@ -15,7 +15,7 @@ struct AddAdjustmentView: View {
     @State private var amount = ""
     @State private var date = Date()
     @State private var currency = "CAD"
-    @State private var exchangeRate = "1.0000"
+    @State private var exchangeRate = ""
     @State private var isOnline = false
     @State private var selectedPlatform: Platform? = nil
     @State private var location = ""
@@ -107,11 +107,7 @@ struct AddAdjustmentView: View {
                     .font(.caption)
                     .foregroundColor(.appSecondary)
                 Spacer()
-                TextField("0.00", text: $amount)
-                    .keyboardType(.decimalPad)
-                    .multilineTextAlignment(.trailing)
-                    .foregroundColor(.appGold)
-                    .frame(width: 100)
+                CurrencyInputField(text: $amount, width: 100, textColor: .appGold, allowsNegative: true)
             }
             .listRowBackground(Color.appSurface)
 
@@ -132,11 +128,7 @@ struct AddAdjustmentView: View {
                     Text("Exchange Rate")
                         .foregroundColor(.appPrimary)
                     Spacer()
-                    TextField("1.0000", text: $exchangeRate)
-                        .keyboardType(.decimalPad)
-                        .multilineTextAlignment(.trailing)
-                        .foregroundColor(.appGold)
-                        .frame(width: 100)
+                    CurrencyInputField(text: $exchangeRate, width: 100, maxDecimalPlaces: 4, textColor: .appGold)
                     Text("\(currency)/\(baseCurrency)")
                         .font(.caption)
                         .foregroundColor(.appSecondary)
@@ -243,6 +235,11 @@ struct AddAdjustmentView: View {
         adjustment.platform = isOnline ? selectedPlatform : nil
         adjustment.location = isOnline ? nil : (location.isEmpty ? nil : location)
         adjustment.notes = notes.isEmpty ? nil : notes
+
+        // Update platform balance for online platform-linked adjustments
+        if isOnline, let platform = selectedPlatform {
+            platform.currentBalance += amountDouble
+        }
 
         do {
             try viewContext.save()

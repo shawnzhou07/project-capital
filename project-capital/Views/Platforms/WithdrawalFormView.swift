@@ -17,6 +17,7 @@ struct WithdrawalFormView: View {
     @State private var showNegativeFeeWarning = false
     @State private var showLockConfirmation = false
     @State private var showProfitAlert = false
+    @State private var showNegativeBalanceAlert = false
 
     var isSameCurrency: Bool { platform.displayCurrency == baseCurrency }
 
@@ -74,6 +75,12 @@ struct WithdrawalFormView: View {
                 }
             }
         }
+        .alert("Insufficient Balance", isPresented: $showNegativeBalanceAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            let requested = Double(amountRequested) ?? 0
+            Text("This withdrawal of \(AppFormatter.currency(requested, code: platform.displayCurrency)) exceeds the current platform balance of \(AppFormatter.currency(platform.currentBalance, code: platform.displayCurrency)).")
+        }
         .alert("Invalid Transaction", isPresented: $showProfitAlert) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -99,27 +106,19 @@ struct WithdrawalFormView: View {
             HStack {
                 Text(requestedLabel).foregroundColor(.appPrimary)
                 Spacer()
-                TextField("0.00", text: $amountRequested)
-                    .keyboardType(.decimalPad)
-                    .multilineTextAlignment(.trailing)
-                    .foregroundColor(.appPrimary)
-                    .frame(width: 120)
-                    .onChange(of: amountRequested) { _, _ in recalcRate() }
+                CurrencyInputField(text: $amountRequested, width: 120)
             }
             .listRowBackground(Color.appSurface)
+            .onChange(of: amountRequested) { _, _ in recalcRate() }
 
             // Amount Received (base currency if FX ON, platform currency if FX OFF)
             HStack {
                 Text(receivedLabel).foregroundColor(.appPrimary)
                 Spacer()
-                TextField("0.00", text: $amountReceived)
-                    .keyboardType(.decimalPad)
-                    .multilineTextAlignment(.trailing)
-                    .foregroundColor(.appPrimary)
-                    .frame(width: 120)
-                    .onChange(of: amountReceived) { _, _ in recalcRate() }
+                CurrencyInputField(text: $amountReceived, width: 120)
             }
             .listRowBackground(Color.appSurface)
+            .onChange(of: amountReceived) { _, _ in recalcRate() }
 
             if !isSameCurrency {
                 Toggle(isOn: $isForeignExchange) {
@@ -133,11 +132,7 @@ struct WithdrawalFormView: View {
                     HStack {
                         Text("Effective Rate").foregroundColor(.appSecondary)
                         Spacer()
-                        TextField("0.0000", text: $effectiveRateStr)
-                            .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.trailing)
-                            .foregroundColor(.appGold)
-                            .frame(width: 90)
+                        CurrencyInputField(text: $effectiveRateStr, width: 90, maxDecimalPlaces: 4, textColor: .appGold)
                         Text("\(baseCurrency)/\(platform.displayCurrency)")
                             .font(.caption).foregroundColor(.appSecondary)
                     }
@@ -185,7 +180,10 @@ struct WithdrawalFormView: View {
     var saveSection: some View {
         Section {
             Button {
-                if isProfitTransaction {
+                let requested = Double(amountRequested) ?? 0
+                if requested > 0 && platform.currentBalance - requested < 0 {
+                    showNegativeBalanceAlert = true
+                } else if isProfitTransaction {
                     showProfitAlert = true
                 } else if !isSameCurrency && !isForeignExchange && processingFee < 0 {
                     showNegativeFeeWarning = true
