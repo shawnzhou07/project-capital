@@ -2,6 +2,12 @@ import SwiftUI
 import CoreData
 
 struct MoreView: View {
+    @EnvironmentObject var coordinator: ActiveSessionCoordinator
+    @Environment(\.managedObjectContext) private var viewContext
+
+    @State private var showDirectAdjustment = false
+    @State private var directAdjustmentPlatform: Platform? = nil
+
     var body: some View {
         ZStack {
             Color.appBackground.ignoresSafeArea()
@@ -28,6 +34,23 @@ struct MoreView: View {
         }
         .navigationTitle("More")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear { handleAdjustmentTrigger() }
+        .onChange(of: coordinator.adjustmentPlatformID) { _, _ in handleAdjustmentTrigger() }
+        .sheet(isPresented: $showDirectAdjustment) {
+            if let p = directAdjustmentPlatform {
+                AddAdjustmentView(initialPlatform: p)
+                    .environment(\.managedObjectContext, viewContext)
+            }
+        }
+    }
+
+    func handleAdjustmentTrigger() {
+        guard let id = coordinator.adjustmentPlatformID else { return }
+        if let platform = try? viewContext.existingObject(with: id) as? Platform {
+            directAdjustmentPlatform = platform
+            showDirectAdjustment = true
+            coordinator.adjustmentPlatformID = nil
+        }
     }
 }
 

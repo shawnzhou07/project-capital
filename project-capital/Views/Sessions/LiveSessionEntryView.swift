@@ -24,8 +24,8 @@ struct LiveSessionEntryView: View {
     @State private var location = ""
     @State private var currency = "CAD"
     // Dual exchange rates
-    @State private var exchangeRateBuyInStr = "1.0000"
-    @State private var exchangeRateCashOutStr = "1.0000"
+    @State private var exchangeRateBuyInStr = ""
+    @State private var exchangeRateCashOutStr = ""
     // Mode B: base currency amounts
     @State private var buyInBaseStr = ""
     @State private var cashOutBaseStr = ""
@@ -40,12 +40,13 @@ struct LiveSessionEntryView: View {
     @State private var tableSize = 9
     @State private var buyIn = ""
     @State private var cashOut = ""
-    @State private var tips = "0"
+    @State private var tips = ""
     @State private var handsOverride = ""
     @State private var notes = ""
 
     @State private var showDiscardAlert = false
     @State private var showRequiredFieldsAlert = false
+    @State private var showZeroDurationAlert = false
     @State private var tick = Date()
     let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
@@ -106,6 +107,11 @@ struct LiveSessionEntryView: View {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text("Please fill in Location, SB, and BB before saving.")
+            }
+            .alert("Invalid Session Duration", isPresented: $showZeroDurationAlert) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("Your session duration is zero or negative. Please correct your start time, end time, or break time before saving.")
             }
             .onAppear {
                 currency = baseCurrency
@@ -168,7 +174,7 @@ struct LiveSessionEntryView: View {
                 .foregroundColor(.appLoss)
         } else if entryState == .stopped {
             Button("Save") {
-                if isValidForSave { saveFinal() } else { showRequiredFieldsAlert = true }
+                if isValidForSave { trySaveFinal() } else { showRequiredFieldsAlert = true }
             }
             .fontWeight(.semibold)
             .foregroundColor(.appGold)
@@ -229,10 +235,14 @@ struct LiveSessionEntryView: View {
             HStack(spacing: 12) {
                 blindField(label: "SB", text: $smallBlind)
                 blindField(label: "BB", text: $bigBlind)
-                blindField(label: "3rd (Opt.)", text: $straddle)
-                blindField(label: "Ante (Opt.)", text: $ante)
+                blindField(label: "STR (opt.)", text: $straddle)
+                blindField(label: "Ante (opt.)", text: $ante)
             }
             .listRowBackground(Color.appSurface)
+            .onChange(of: smallBlind) { _, _ in autoSaveIfActive() }
+            .onChange(of: bigBlind) { _, _ in autoSaveIfActive() }
+            .onChange(of: straddle) { _, _ in autoSaveIfActive() }
+            .onChange(of: ante) { _, _ in autoSaveIfActive() }
 
             Stepper("Table Size: \(tableSize)", value: $tableSize, in: 2...10)
                 .foregroundColor(.appPrimary)
@@ -249,15 +259,11 @@ struct LiveSessionEntryView: View {
             Text(label)
                 .font(.caption2)
                 .foregroundColor(.appSecondary)
-            TextField("0", text: text)
-                .keyboardType(.decimalPad)
-                .foregroundColor(.white)
-                .multilineTextAlignment(.center)
+            CurrencyInputField(text: text, width: nil, textAlignment: .center)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 6)
                 .background(Color.appSurface2)
                 .cornerRadius(6)
-                .onChange(of: text.wrappedValue) { _, _ in autoSaveIfActive() }
         }
     }
 
@@ -279,11 +285,7 @@ struct LiveSessionEntryView: View {
             HStack {
                 Text("Break (min)").foregroundColor(.appPrimary)
                 Spacer()
-                TextField("0", text: $breakTimeStr)
-                    .keyboardType(.numberPad)
-                    .multilineTextAlignment(.trailing)
-                    .foregroundColor(.white)
-                    .frame(width: 80)
+                CurrencyInputField(text: $breakTimeStr, width: 80, maxDecimalPlaces: 0)
                     .onChange(of: breakTimeStr) { _, _ in autoSaveIfActive() }
             }
             .listRowBackground(Color.appSurface)
@@ -293,9 +295,9 @@ struct LiveSessionEntryView: View {
                 Spacer()
                 if entryState == .active {
                     HStack(spacing: 6) {
-                        Circle().fill(Color.appGold).frame(width: 6, height: 6)
+                        Circle().fill(Color(hex: "#34C759")).frame(width: 6, height: 6)
                         Text(elapsedText)
-                            .foregroundColor(.appGold)
+                            .foregroundColor(.appSecondary)
                             .fontWeight(.medium)
                             .monospacedDigit()
                     }
@@ -318,11 +320,7 @@ struct LiveSessionEntryView: View {
                 Text("Buy In").foregroundColor(.appPrimary)
                 Spacer()
                 Text(currency).font(.caption).foregroundColor(.appSecondary)
-                TextField("0", text: $buyIn)
-                    .keyboardType(.decimalPad)
-                    .multilineTextAlignment(.trailing)
-                    .foregroundColor(.appPrimary)
-                    .frame(width: 100)
+                CurrencyInputField(text: $buyIn, width: 100)
                     .onChange(of: buyIn) { _, _ in
                         if exchangeRateInputMode == "amounts" && exchangeRateBuyIn > 0 {
                             buyInBaseStr = String(format: "%.2f", buyInDouble * exchangeRateBuyIn)
@@ -336,11 +334,7 @@ struct LiveSessionEntryView: View {
                 Text("Cash Out").foregroundColor(.appPrimary)
                 Spacer()
                 Text(currency).font(.caption).foregroundColor(.appSecondary)
-                TextField("0", text: $cashOut)
-                    .keyboardType(.decimalPad)
-                    .multilineTextAlignment(.trailing)
-                    .foregroundColor(.appPrimary)
-                    .frame(width: 100)
+                CurrencyInputField(text: $cashOut, width: 100)
                     .onChange(of: cashOut) { _, _ in
                         if exchangeRateInputMode == "amounts" && exchangeRateCashOut > 0 {
                             cashOutBaseStr = String(format: "%.2f", cashOutDouble * exchangeRateCashOut)
@@ -354,11 +348,7 @@ struct LiveSessionEntryView: View {
                 Text("Tips").foregroundColor(.appPrimary)
                 Spacer()
                 Text(currency).font(.caption).foregroundColor(.appSecondary)
-                TextField("0", text: $tips)
-                    .keyboardType(.decimalPad)
-                    .multilineTextAlignment(.trailing)
-                    .foregroundColor(.appPrimary)
-                    .frame(width: 100)
+                CurrencyInputField(text: $tips, width: 100)
                     .onChange(of: tips) { _, _ in autoSaveIfActive() }
             }
             .listRowBackground(Color.appSurface)
@@ -389,9 +379,7 @@ struct LiveSessionEntryView: View {
                 HStack {
                     Text("Buy-In Rate").foregroundColor(.appPrimary)
                     Spacer()
-                    TextField("1.0000", text: $exchangeRateBuyInStr)
-                        .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
-                        .foregroundColor(.white).frame(width: 90)
+                    CurrencyInputField(text: $exchangeRateBuyInStr, width: 90, maxDecimalPlaces: 4)
                     Text("\(currency)/\(baseCurrency)").font(.caption).foregroundColor(.appSecondary)
                 }
                 .listRowBackground(Color.appSurface)
@@ -404,9 +392,7 @@ struct LiveSessionEntryView: View {
                 HStack {
                     Text("Cash-Out Rate").foregroundColor(.appPrimary)
                     Spacer()
-                    TextField("1.0000", text: $exchangeRateCashOutStr)
-                        .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
-                        .foregroundColor(.white).frame(width: 90)
+                    CurrencyInputField(text: $exchangeRateCashOutStr, width: 90, maxDecimalPlaces: 4)
                     Text("\(currency)/\(baseCurrency)").font(.caption).foregroundColor(.appSecondary)
                 }
                 .listRowBackground(Color.appSurface)
@@ -421,13 +407,13 @@ struct LiveSessionEntryView: View {
                 HStack {
                     Text("Amount (\(currency))").foregroundColor(.appPrimary)
                     Spacer()
-                    TextField("0", text: $buyIn).keyboardType(.decimalPad).multilineTextAlignment(.trailing).foregroundColor(.white).frame(width: 100)
+                    CurrencyInputField(text: $buyIn, width: 100)
                 }
                 .listRowBackground(Color.appSurface)
                 HStack {
                     Text("Equivalent (\(baseCurrency))").foregroundColor(.appPrimary)
                     Spacer()
-                    TextField("0", text: $buyInBaseStr).keyboardType(.decimalPad).multilineTextAlignment(.trailing).foregroundColor(.white).frame(width: 100)
+                    CurrencyInputField(text: $buyInBaseStr, width: 100)
                 }
                 .listRowBackground(Color.appSurface)
                 HStack {
@@ -441,13 +427,13 @@ struct LiveSessionEntryView: View {
                 HStack {
                     Text("Amount (\(currency))").foregroundColor(.appPrimary)
                     Spacer()
-                    TextField("0", text: $cashOut).keyboardType(.decimalPad).multilineTextAlignment(.trailing).foregroundColor(.white).frame(width: 100)
+                    CurrencyInputField(text: $cashOut, width: 100)
                 }
                 .listRowBackground(Color.appSurface)
                 HStack {
                     Text("Equivalent (\(baseCurrency))").foregroundColor(.appPrimary)
                     Spacer()
-                    TextField("0", text: $cashOutBaseStr).keyboardType(.decimalPad).multilineTextAlignment(.trailing).foregroundColor(.white).frame(width: 100)
+                    CurrencyInputField(text: $cashOutBaseStr, width: 100)
                 }
                 .listRowBackground(Color.appSurface)
                 HStack {
@@ -562,6 +548,11 @@ struct LiveSessionEntryView: View {
         } catch { print("Stop error: \(error)") }
     }
 
+    func trySaveFinal() {
+        guard sessionDurationHours > 0 else { showZeroDurationAlert = true; return }
+        saveFinal()
+    }
+
     func saveFinal() {
         guard let session = coreDataSession else { return }
         session.location = location
@@ -630,7 +621,7 @@ struct LiveSessionEntryView: View {
         tableSize = Int(session.tableSize)
         buyIn = session.buyIn > 0 ? String(format: "%.2f", session.buyIn) : ""
         cashOut = session.cashOut > 0 ? String(format: "%.2f", session.cashOut) : ""
-        tips = session.tips > 0 ? String(format: "%.2f", session.tips) : "0"
+        tips = session.tips > 0 ? String(format: "%.2f", session.tips) : ""
         handsOverride = session.handsCount > 0 ? String(session.handsCount) : ""
         notes = session.notes ?? ""
         startTime = session.startTime ?? Date()
@@ -650,12 +641,14 @@ struct LiveSessionEntryView: View {
         breakTimeStr = session.breakTime > 0 ? String(Int(session.breakTime)) : ""
 
         if session.exchangeRateCashOut > 0 {
-            exchangeRateBuyInStr = String(format: "%.4f", session.exchangeRateBuyIn > 0 ? session.exchangeRateBuyIn : session.exchangeRateCashOut)
-            exchangeRateCashOutStr = String(format: "%.4f", session.exchangeRateCashOut)
+            let rBI = session.exchangeRateBuyIn > 0 ? session.exchangeRateBuyIn : session.exchangeRateCashOut
+            exchangeRateBuyInStr = rBI == 1.0 ? "" : String(format: "%.4f", rBI)
+            exchangeRateCashOutStr = session.exchangeRateCashOut == 1.0 ? "" : String(format: "%.4f", session.exchangeRateCashOut)
             cashOutRateManuallySet = session.exchangeRateBuyIn != session.exchangeRateCashOut
         } else if session.exchangeRateToBase > 0 {
-            exchangeRateBuyInStr = String(format: "%.4f", session.exchangeRateToBase)
-            exchangeRateCashOutStr = String(format: "%.4f", session.exchangeRateToBase)
+            let r = session.exchangeRateToBase
+            exchangeRateBuyInStr = r == 1.0 ? "" : String(format: "%.4f", r)
+            exchangeRateCashOutStr = r == 1.0 ? "" : String(format: "%.4f", r)
         }
         entryState = .active
     }

@@ -196,7 +196,7 @@ struct PlatformDetailView: View {
                                 Text(AppFormatter.shortDate(session.sessionDate))
                                     .font(.caption)
                                     .foregroundColor(.appSecondary)
-                                Text("\(session.displayGameType) \(session.displayBlinds)")
+                                Text(session.displayBlinds.isEmpty ? session.displayGameType : "\(session.displayGameType) \(session.displayBlinds)")
                                     .font(.subheadline)
                                     .foregroundColor(.appPrimary)
                             }

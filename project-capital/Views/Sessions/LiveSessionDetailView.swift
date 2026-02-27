@@ -41,6 +41,8 @@ struct LiveSessionDetailView: View {
     @State private var notes = ""
     @State private var loaded = false
     @State private var elapsed: TimeInterval = 0
+    // Tracks whether this detail view was opened while the session was active
+    @State private var isSessionActive = false
     let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var isSameCurrency: Bool { currency == baseCurrency }
@@ -68,6 +70,13 @@ struct LiveSessionDetailView: View {
         !location.trimmingCharacters(in: .whitespaces).isEmpty &&
         !gameType.isEmpty &&
         sbDouble > 0 && bbDouble > 0
+    }
+
+    // Live duration text (elapsed minus break time) for the active-session duration row
+    var activeDurationText: String {
+        let breakHours = breakTimeMinutes / 60.0
+        let netHours = max(0, elapsed / 3600.0 - breakHours)
+        return AppFormatter.duration(netHours)
     }
 
     var body: some View {
@@ -114,6 +123,20 @@ struct LiveSessionDetailView: View {
         mainZStack
             .navigationTitle("Live Session")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if isSessionActive {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button("Stop") { stopSession() }
+                            .fontWeight(.semibold)
+                            .foregroundColor(.appLoss)
+                    }
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Image(systemName: "circle.fill")
+                            .font(.system(size: 10))
+                            .foregroundColor(Color(hex: "#34C759"))
+                    }
+                }
+            }
             .onAppear { loadFromSession() }
             .onChange(of: location) { _, _ in autoSave() }
             .onChange(of: currency) { _, _ in autoSave() }
@@ -141,6 +164,7 @@ struct LiveSessionDetailView: View {
                 else { prevStartTime = startTime; autoSave() }
             }
             .onChange(of: endTime) { oldVal, newVal in
+                guard !isSessionActive else { return }
                 if oldVal.timeIntervalSince(newVal) > 20 * 3600 {
                     endTime = Calendar.current.date(byAdding: .day, value: 1, to: newVal) ?? newVal
                     return
@@ -182,7 +206,7 @@ struct LiveSessionDetailView: View {
             .alert("Invalid Session Duration", isPresented: $showZeroDurationAlert) {
                 Button("OK", role: .cancel) {}
             } message: {
-                Text("Start time and end time result in zero or negative duration. Please correct the session times before verifying.")
+                Text("Your session duration is zero or negative. Please correct your start time, end time, or break time before saving.")
             }
     }
 
@@ -190,7 +214,10 @@ struct LiveSessionDetailView: View {
 
     var verifyBar: some View {
         Group {
-            if isVerified {
+            if isSessionActive {
+                // Session is currently running — no verify bar shown
+                EmptyView()
+            } else if isVerified {
                 HStack(spacing: 6) {
                     Image(systemName: "checkmark.seal.fill")
                         .foregroundColor(.appGold)
@@ -345,9 +372,11 @@ struct LiveSessionDetailView: View {
             DatePicker("Start", selection: $startTime, displayedComponents: [.date, .hourAndMinute])
                 .foregroundColor(.appPrimary).tint(.appGold)
                 .listRowBackground(Color.appSurface)
-            DatePicker("End", selection: $endTime, displayedComponents: [.date, .hourAndMinute])
-                .foregroundColor(.appPrimary).tint(.appGold)
-                .listRowBackground(Color.appSurface)
+            if !isSessionActive {
+                DatePicker("End", selection: $endTime, displayedComponents: [.date, .hourAndMinute])
+                    .foregroundColor(.appPrimary).tint(.appGold)
+                    .listRowBackground(Color.appSurface)
+            }
             HStack {
                 Text("Break (min)").foregroundColor(.appPrimary)
                 Spacer()
@@ -357,7 +386,18 @@ struct LiveSessionDetailView: View {
             HStack {
                 Text("Duration").foregroundColor(.appPrimary)
                 Spacer()
-                Text(AppFormatter.duration(duration)).foregroundColor(.appSecondary)
+                if isSessionActive {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(Color(hex: "#34C759"))
+                            .frame(width: 8, height: 8)
+                        Text(activeDurationText)
+                            .foregroundColor(.appSecondary)
+                            .monospacedDigit()
+                    }
+                } else {
+                    Text(AppFormatter.duration(duration)).foregroundColor(.appSecondary)
+                }
             }
             .listRowBackground(Color.appSurface)
         } header: {
@@ -402,26 +442,28 @@ struct LiveSessionDetailView: View {
             .listRowBackground(Color.appSurface)
 
             HStack {
-                if isVerified {
-                    Image(systemName: "lock.fill")
-                        .font(.caption)
-                        .foregroundColor(.appGold)
-                        .shadow(color: Color.appGold.opacity(0.8), radius: 4, x: 0, y: 0)
-                }
                 Text("Net Result").foregroundColor(.appPrimary)
                 Spacer()
-                VStack(alignment: .trailing, spacing: 2) {
-                    let netToShow = isVerified ? session.netProfitLoss : netPL
-                    let netBaseToShow = isVerified ? session.netProfitLossBase : netPLBase
-                    Text(AppFormatter.currencySigned(netToShow, code: currency))
-                        .fontWeight(.semibold)
-                        .foregroundColor(netToShow.profitColor)
-                        .shadow(color: isVerified ? netToShow.profitColor.opacity(0.8) : .clear, radius: 8, x: 0, y: 0)
-                    if !isSameCurrency {
-                        Text(AppFormatter.currencySigned(netBaseToShow, code: baseCurrency))
+                HStack(spacing: 4) {
+                    if isVerified {
+                        Image(systemName: "lock.fill")
                             .font(.caption)
-                            .foregroundColor(netBaseToShow.profitColor)
-                            .shadow(color: isVerified ? netBaseToShow.profitColor.opacity(0.8) : .clear, radius: 8, x: 0, y: 0)
+                            .foregroundColor(.appGold)
+                            .shadow(color: Color.appGold.opacity(0.8), radius: 4, x: 0, y: 0)
+                    }
+                    VStack(alignment: .trailing, spacing: 2) {
+                        let netToShow = isVerified ? session.netProfitLoss : netPL
+                        let netBaseToShow = isVerified ? session.netProfitLossBase : netPLBase
+                        Text(AppFormatter.currencySigned(netToShow, code: currency))
+                            .fontWeight(.semibold)
+                            .foregroundColor(netToShow.profitColor)
+                            .shadow(color: isVerified ? netToShow.profitColor.opacity(0.8) : .clear, radius: 8, x: 0, y: 0)
+                        if !isSameCurrency {
+                            Text(AppFormatter.currencySigned(netBaseToShow, code: baseCurrency))
+                                .font(.caption)
+                                .foregroundColor(netBaseToShow.profitColor)
+                                .shadow(color: isVerified ? netBaseToShow.profitColor.opacity(0.8) : .clear, radius: 8, x: 0, y: 0)
+                        }
                     }
                 }
             }
@@ -618,9 +660,22 @@ struct LiveSessionDetailView: View {
         autoSave()
     }
 
+    /// Stop the active session: record end time and transition to stopped state.
+    func stopSession() {
+        endTime = Date()
+        session.endTime = endTime
+        session.breakTime = breakTimeMinutes
+        session.duration = max(0, endTime.timeIntervalSince(startTime) / 3600.0 - breakTimeMinutes / 60.0)
+        isSessionActive = false
+        prevEndTime = endTime
+        try? viewContext.save()
+    }
+
     func loadFromSession() {
         guard !loaded else { return }
         loaded = true
+        // Capture active state before setting up other fields
+        isSessionActive = session.isActive
         location = session.location ?? ""
         currency = session.currency ?? baseCurrency
         gameType = session.gameType ?? "No Limit Hold'em"
@@ -641,7 +696,8 @@ struct LiveSessionDetailView: View {
         breakTimeStr = session.breakTime > 0 ? String(Int(session.breakTime)) : ""
         tableSize = Int(session.tableSize)
         startTime = session.startTime ?? Date()
-        endTime = session.endTime ?? Date()
+        // For active sessions, use a placeholder endTime that is NOT written back to Core Data
+        endTime = session.isActive ? Date() : (session.endTime ?? Date())
         prevStartTime = startTime
         prevEndTime = endTime
         buyIn = session.buyIn == 0 ? "" : String(format: "%.2f", session.buyIn)
@@ -696,8 +752,11 @@ struct LiveSessionDetailView: View {
         session.tableSize = Int16(tableSize)
         session.breakTime = breakTimeMinutes
         session.startTime = startTime
-        session.endTime = endTime
-        session.duration = duration
+        // Only write endTime and duration once the session is stopped
+        if !isSessionActive {
+            session.endTime = endTime
+            session.duration = duration
+        }
         session.tips = Double(tips) ?? 0
         session.netProfitLoss = netPL
         session.netProfitLossBase = netPLBase

@@ -6,10 +6,6 @@ struct OnboardingView: View {
     @State private var selectedCurrency = "CAD"
     @State private var selectedExchangeMode = "direct"
     @State private var selectedPlatforms: Set<String> = []
-    @State private var customPlatformName = ""
-    @State private var customPlatformCurrency = "USD"
-    @State private var showCustomPlatform = false
-
     @AppStorage("baseCurrency") private var baseCurrency = "CAD"
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     @Environment(\.managedObjectContext) private var viewContext
@@ -154,35 +150,16 @@ struct OnboardingView: View {
                             }
                         }
                     }
-                    Button {
-                        showCustomPlatform = true
-                    } label: {
-                        HStack {
-                            Image(systemName: "plus.circle.fill")
-                                .foregroundColor(.appGold)
-                            Text("Add Custom Platform")
-                                .foregroundColor(.appGold)
-                            Spacer()
-                        }
-                        .padding()
-                        .background(Color.appSurface)
-                        .cornerRadius(8)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(Color.appBorder, lineWidth: 1)
-                        )
-                    }
+                    Text("You can add custom platforms later in the Platforms tab.")
+                        .font(.caption)
+                        .foregroundColor(.appSecondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.top, 4)
                 }
                 .padding()
             }
             OnboardingNextButton(title: "Start Tracking") {
                 savePlatformsAndComplete()
-            }
-        }
-        .sheet(isPresented: $showCustomPlatform) {
-            CustomPlatformSheet(name: $customPlatformName, currency: $customPlatformCurrency) { name, currency in
-                selectedPlatforms.insert("\(name)|\(currency)")
-                showCustomPlatform = false
             }
         }
     }
@@ -407,49 +384,6 @@ struct PlatformSelectionRow: View {
                 RoundedRectangle(cornerRadius: 8)
                     .stroke(isSelected ? Color.appGold : Color.appBorder, lineWidth: isSelected ? 1.5 : 1)
             )
-        }
-    }
-}
-
-struct CustomPlatformSheet: View {
-    @Binding var name: String
-    @Binding var currency: String
-    let onSave: (String, String) -> Void
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            ZStack {
-                Color.appBackground.ignoresSafeArea()
-                Form {
-                    Section("Platform Details") {
-                        TextField("Platform Name", text: $name)
-                            .foregroundColor(.appPrimary)
-                        Picker("Currency", selection: $currency) {
-                            ForEach(["CAD", "USD", "EUR", "GBP"], id: \.self) { Text($0) }
-                        }
-                    }
-                    .listRowBackground(Color.appSurface)
-                }
-                .scrollContentBackground(.hidden)
-            }
-            .navigationTitle("Custom Platform")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                        .foregroundColor(.appSecondary)
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Add") {
-                        if !name.isEmpty {
-                            onSave(name, currency)
-                        }
-                    }
-                    .foregroundColor(.appGold)
-                    .disabled(name.isEmpty)
-                }
-            }
         }
     }
 }

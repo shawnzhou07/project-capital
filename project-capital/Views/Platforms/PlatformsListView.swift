@@ -4,6 +4,7 @@ import CoreData
 struct PlatformsListView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @AppStorage("baseCurrency") private var baseCurrency = "CAD"
+    @EnvironmentObject var coordinator: ActiveSessionCoordinator
 
     @FetchRequest(
         sortDescriptors: [NSSortDescriptor(keyPath: \Platform.name, ascending: true)],
@@ -13,6 +14,10 @@ struct PlatformsListView: View {
     @State private var showAddPlatform = false
     @State private var platformToDelete: Platform? = nil
     @State private var showDeleteAlert = false
+    @State private var externalDepositPlatform: Platform? = nil
+    @State private var externalWithdrawalPlatform: Platform? = nil
+    @State private var showExternalDeposit = false
+    @State private var showExternalWithdrawal = false
 
     var body: some View {
         ZStack {
@@ -59,6 +64,22 @@ struct PlatformsListView: View {
         .sheet(isPresented: $showAddPlatform) {
             AddPlatformView()
         }
+        .sheet(isPresented: $showExternalDeposit) {
+            if let p = externalDepositPlatform {
+                DepositFormView(platform: p)
+            }
+        }
+        .sheet(isPresented: $showExternalWithdrawal) {
+            if let p = externalWithdrawalPlatform {
+                WithdrawalFormView(platform: p)
+            }
+        }
+        .onAppear { handleCoordinatorTriggers() }
+        .onChange(of: coordinator.shouldOpenAddPlatform) { _, v in
+            if v { showAddPlatform = true; coordinator.shouldOpenAddPlatform = false }
+        }
+        .onChange(of: coordinator.platformIDForDeposit) { _, _ in handleCoordinatorTriggers() }
+        .onChange(of: coordinator.platformIDForWithdrawal) { _, _ in handleCoordinatorTriggers() }
         .alert(deleteAlertTitle, isPresented: $showDeleteAlert) {
             Button("Delete", role: .destructive) {
                 if let p = platformToDelete {
@@ -72,6 +93,25 @@ struct PlatformsListView: View {
             }
         } message: {
             Text(deleteAlertMessage)
+        }
+    }
+
+    func handleCoordinatorTriggers() {
+        if coordinator.shouldOpenAddPlatform {
+            showAddPlatform = true
+            coordinator.shouldOpenAddPlatform = false
+        }
+        if let id = coordinator.platformIDForDeposit,
+           let platform = platforms.first(where: { $0.objectID == id }) {
+            externalDepositPlatform = platform
+            showExternalDeposit = true
+            coordinator.platformIDForDeposit = nil
+        }
+        if let id = coordinator.platformIDForWithdrawal,
+           let platform = platforms.first(where: { $0.objectID == id }) {
+            externalWithdrawalPlatform = platform
+            showExternalWithdrawal = true
+            coordinator.platformIDForWithdrawal = nil
         }
     }
 

@@ -99,10 +99,17 @@ extension OnlineCash {
     var displayGameType: String { gameType ?? "Hold'em" }
 
     var displayBlinds: String {
-        if smallBlind > 0 || bigBlind > 0 {
-            return "$\(AppFormatter.blindValue(smallBlind))/$\(AppFormatter.blindValue(bigBlind))"
+        guard smallBlind > 0 && bigBlind > 0 else { return "" }
+        let base = "\(AppFormatter.blindValue(smallBlind))/\(AppFormatter.blindValue(bigBlind))"
+        if straddle > 0 && ante > 0 {
+            return "\(base)/\(AppFormatter.blindValue(straddle)) (\(AppFormatter.blindValue(ante)))"
+        } else if straddle > 0 {
+            return "\(base)/\(AppFormatter.blindValue(straddle))"
+        } else if ante > 0 {
+            return "\(base) (\(AppFormatter.blindValue(ante)))"
+        } else {
+            return base
         }
-        return blinds ?? ""
     }
 
     var isActive: Bool { endTime == nil && startTime != nil }
@@ -141,10 +148,17 @@ extension LiveCash {
     var displayGameType: String { gameType ?? "Hold'em" }
 
     var displayBlinds: String {
-        if smallBlind > 0 || bigBlind > 0 {
-            return "$\(AppFormatter.blindValue(smallBlind))/$\(AppFormatter.blindValue(bigBlind))"
+        guard smallBlind > 0 && bigBlind > 0 else { return "" }
+        let base = "\(AppFormatter.blindValue(smallBlind))/\(AppFormatter.blindValue(bigBlind))"
+        if straddle > 0 && ante > 0 {
+            return "\(base)/\(AppFormatter.blindValue(straddle)) (\(AppFormatter.blindValue(ante)))"
+        } else if straddle > 0 {
+            return "\(base)/\(AppFormatter.blindValue(straddle))"
+        } else if ante > 0 {
+            return "\(base) (\(AppFormatter.blindValue(ante)))"
+        } else {
+            return base
         }
-        return blinds ?? ""
     }
 
     var isActive: Bool { endTime == nil && startTime != nil }

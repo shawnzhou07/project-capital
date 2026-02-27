@@ -7,6 +7,7 @@ struct OnlineSessionDetailView: View {
     @ObservedObject var session: OnlineCash
     @Environment(\.managedObjectContext) private var viewContext
     @AppStorage("baseCurrency") private var baseCurrency = "CAD"
+    @EnvironmentObject var coordinator: ActiveSessionCoordinator
 
     @FetchRequest(
         sortDescriptors: [NSSortDescriptor(keyPath: \Platform.name, ascending: true)],
@@ -17,7 +18,13 @@ struct OnlineSessionDetailView: View {
     @State private var showVerifyAlert = false
     @State private var showTimeAlert = false
     @State private var showZeroDurationAlert = false
+    @State private var showBalanceDiscrepancy = false
+    @State private var discrepancyResolved: Bool = false
+    @State private var discrepancyDirection: DiscrepancyDirection = .higher
+    @State private var discrepancyPlatformBalance: Double = 0
     @Environment(\.dismiss) private var dismiss
+
+    enum DiscrepancyDirection { case higher, lower }
 
     @State private var gameType = ""
     @State private var smallBlind = ""
@@ -39,6 +46,8 @@ struct OnlineSessionDetailView: View {
     @State private var showPlatformPicker = false
     @State private var loaded = false
     @State private var elapsed: TimeInterval = 0
+    // Tracks whether this detail view was opened while the session was active
+    @State private var isSessionActive = false
     let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var breakTimeMinutes: Double { Double(breakTimeStr) ?? 0 }
@@ -59,7 +68,14 @@ struct OnlineSessionDetailView: View {
     }
     var isVerified: Bool { session.isVerified }
     var canVerify: Bool {
-        selectedPlatform != nil && !gameType.isEmpty && sbDouble > 0 && bbDouble > 0
+        selectedPlatform != nil && !gameType.isEmpty && sbDouble > 0 && bbDouble > 0 && discrepancyResolved
+    }
+
+    // Live duration text (elapsed minus break time) for the active-session duration row
+    var activeDurationText: String {
+        let breakHours = breakTimeMinutes / 60.0
+        let netHours = max(0, elapsed / 3600.0 - breakHours)
+        return AppFormatter.duration(netHours)
     }
 
     var body: some View {
@@ -101,6 +117,20 @@ struct OnlineSessionDetailView: View {
         mainZStack
             .navigationTitle("Online Session")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if isSessionActive {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button("Stop") { stopSession() }
+                            .fontWeight(.semibold)
+                            .foregroundColor(.appLoss)
+                    }
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Image(systemName: "circle.fill")
+                            .font(.system(size: 10))
+                            .foregroundColor(Color(hex: "#34C759"))
+                    }
+                }
+            }
             .onAppear { loadFromSession() }
             .onChange(of: gameType) { _, _ in autoSave() }
             .onChange(of: smallBlind) { _, _ in autoSave() }
@@ -128,6 +158,7 @@ struct OnlineSessionDetailView: View {
                 else { prevStartTime = startTime; autoSave() }
             }
             .onChange(of: endTime) { oldVal, newVal in
+                guard !isSessionActive else { return }
                 if oldVal.timeIntervalSince(newVal) > 20 * 3600 {
                     endTime = Calendar.current.date(byAdding: .day, value: 1, to: newVal) ?? newVal
                     return
@@ -147,7 +178,7 @@ struct OnlineSessionDetailView: View {
             .alert("Invalid Session Duration", isPresented: $showZeroDurationAlert) {
                 Button("OK", role: .cancel) {}
             } message: {
-                Text("Start time and end time result in zero or negative duration. Please correct the session times before saving.")
+                Text("Your session duration is zero or negative. Please correct your start time, end time, or break time before saving.")
             }
             .alert("Delete Session?", isPresented: $showDeleteAlert) {
                 Button("Delete", role: .destructive) {
@@ -166,6 +197,48 @@ struct OnlineSessionDetailView: View {
             } message: {
                 Text("Verify this session? Balance Before and Balance After will be permanently locked and cannot be changed.")
             }
+            .alert("Balance Discrepancy", isPresented: $showBalanceDiscrepancy) {
+                if discrepancyDirection == .higher {
+                    Button("Add Deposit") {
+                        autoSave()
+                        if let platform = selectedPlatform {
+                            coordinator.platformIDForDeposit = platform.objectID
+                        }
+                        coordinator.selectedTab = 2
+                        dismiss()
+                    }
+                    Button("Log Adjustment") {
+                        autoSave()
+                        if let platform = selectedPlatform {
+                            coordinator.adjustmentPlatformID = platform.objectID
+                        }
+                        coordinator.selectedTab = 3
+                        dismiss()
+                    }
+                } else {
+                    Button("Record Withdrawal") {
+                        autoSave()
+                        if let platform = selectedPlatform {
+                            coordinator.platformIDForWithdrawal = platform.objectID
+                        }
+                        coordinator.selectedTab = 2
+                        dismiss()
+                    }
+                    Button("Log Adjustment") {
+                        autoSave()
+                        if let platform = selectedPlatform {
+                            coordinator.adjustmentPlatformID = platform.objectID
+                        }
+                        coordinator.selectedTab = 3
+                        dismiss()
+                    }
+                }
+                Button("OK", role: .cancel) {
+                    discrepancyResolved = true
+                }
+            } message: {
+                Text(discrepancyAlertMessage)
+            }
             .sheet(isPresented: $showPlatformPicker) {
                 PlatformPickerSheet(platforms: Array(platforms), selected: $selectedPlatform) {
                     showPlatformPicker = false
@@ -177,7 +250,10 @@ struct OnlineSessionDetailView: View {
 
     var verifyBar: some View {
         Group {
-            if isVerified {
+            if isSessionActive {
+                // Session is currently running — no verify bar shown
+                EmptyView()
+            } else if isVerified {
                 HStack(spacing: 6) {
                     Image(systemName: "checkmark.seal.fill").foregroundColor(.appGold).font(.subheadline)
                     Text("Verified").font(.subheadline).fontWeight(.medium).foregroundColor(.appGold)
@@ -314,9 +390,11 @@ struct OnlineSessionDetailView: View {
             DatePicker("Start", selection: $startTime, displayedComponents: [.date, .hourAndMinute])
                 .foregroundColor(.appPrimary).tint(.appGold)
                 .listRowBackground(Color.appSurface)
-            DatePicker("End", selection: $endTime, displayedComponents: [.date, .hourAndMinute])
-                .foregroundColor(.appPrimary).tint(.appGold)
-                .listRowBackground(Color.appSurface)
+            if !isSessionActive {
+                DatePicker("End", selection: $endTime, displayedComponents: [.date, .hourAndMinute])
+                    .foregroundColor(.appPrimary).tint(.appGold)
+                    .listRowBackground(Color.appSurface)
+            }
             HStack {
                 Text("Break (min)").foregroundColor(.appPrimary)
                 Spacer()
@@ -326,7 +404,18 @@ struct OnlineSessionDetailView: View {
             HStack {
                 Text("Duration").foregroundColor(.appPrimary)
                 Spacer()
-                Text(AppFormatter.duration(duration)).foregroundColor(.appSecondary)
+                if isSessionActive {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(Color(hex: "#34C759"))
+                            .frame(width: 8, height: 8)
+                        Text(activeDurationText)
+                            .foregroundColor(.appSecondary)
+                            .monospacedDigit()
+                    }
+                } else {
+                    Text(AppFormatter.duration(duration)).foregroundColor(.appSecondary)
+                }
             }
             .listRowBackground(Color.appSurface)
         } header: {
@@ -364,32 +453,34 @@ struct OnlineSessionDetailView: View {
 
             // Net Result row — gold lock + glow when verified
             HStack {
-                if isVerified {
-                    Image(systemName: "lock.fill")
-                        .font(.caption)
-                        .foregroundColor(.appGold)
-                        .shadow(color: Color.appGold.opacity(0.8), radius: 4, x: 0, y: 0)
-                }
                 Text("Net Result").foregroundColor(.appPrimary)
                 Spacer()
-                VStack(alignment: .trailing, spacing: 2) {
-                    let netToShow = isVerified ? session.netProfitLoss : netPL
-                    let netBaseToShow = isVerified ? session.netProfitLossBase : netPLBase
-                    Text(AppFormatter.currencySigned(netToShow, code: platformCurrency))
-                        .fontWeight(.semibold)
-                        .foregroundColor(netToShow.profitColor)
-                        .shadow(
-                            color: isVerified ? netToShow.profitColor.opacity(0.8) : .clear,
-                            radius: 8, x: 0, y: 0
-                        )
-                    if !isSameCurrency {
-                        Text(AppFormatter.currencySigned(netBaseToShow, code: baseCurrency))
+                HStack(spacing: 4) {
+                    if isVerified {
+                        Image(systemName: "lock.fill")
                             .font(.caption)
-                            .foregroundColor(netBaseToShow.profitColor)
+                            .foregroundColor(.appGold)
+                            .shadow(color: Color.appGold.opacity(0.8), radius: 4, x: 0, y: 0)
+                    }
+                    VStack(alignment: .trailing, spacing: 2) {
+                        let netToShow = isVerified ? session.netProfitLoss : netPL
+                        let netBaseToShow = isVerified ? session.netProfitLossBase : netPLBase
+                        Text(AppFormatter.currencySigned(netToShow, code: platformCurrency))
+                            .fontWeight(.semibold)
+                            .foregroundColor(netToShow.profitColor)
                             .shadow(
-                                color: isVerified ? netBaseToShow.profitColor.opacity(0.8) : .clear,
+                                color: isVerified ? netToShow.profitColor.opacity(0.8) : .clear,
                                 radius: 8, x: 0, y: 0
                             )
+                        if !isSameCurrency {
+                            Text(AppFormatter.currencySigned(netBaseToShow, code: baseCurrency))
+                                .font(.caption)
+                                .foregroundColor(netBaseToShow.profitColor)
+                                .shadow(
+                                    color: isVerified ? netBaseToShow.profitColor.opacity(0.8) : .clear,
+                                    radius: 8, x: 0, y: 0
+                                )
+                        }
                     }
                 }
             }
@@ -467,6 +558,32 @@ struct OnlineSessionDetailView: View {
         generator.impactOccurred()
     }
 
+    var discrepancyAlertMessage: String {
+        let currentBal = AppFormatter.currency(discrepancyPlatformBalance, code: platformCurrency)
+        let expectedBal = AppFormatter.currency(session.balanceAfter, code: platformCurrency)
+        if discrepancyDirection == .higher {
+            return "The platform now shows \(currentBal), but this session recorded \(expectedBal) as the balance after. It appears funds were added. Would you like to record a deposit or log an adjustment?"
+        } else {
+            return "The platform now shows \(currentBal), but this session recorded \(expectedBal) as the balance after. It appears funds are missing. Would you like to record a withdrawal or log an adjustment?"
+        }
+    }
+
+    func checkDiscrepancy() {
+        guard !session.isVerified, let platform = selectedPlatform else {
+            discrepancyResolved = true
+            return
+        }
+        let currentBal = platform.currentBalance
+        let expectedBal = session.balanceAfter
+        guard abs(currentBal - expectedBal) > 0.01 else {
+            discrepancyResolved = true
+            return
+        }
+        discrepancyPlatformBalance = currentBal
+        discrepancyDirection = currentBal > expectedBal ? .higher : .lower
+        showBalanceDiscrepancy = true
+    }
+
     func tryVerifySession() {
         guard duration > 0 else { showZeroDurationAlert = true; return }
         verifySession()
@@ -478,9 +595,22 @@ struct OnlineSessionDetailView: View {
         autoSave()
     }
 
+    /// Stop the active session: record end time and transition to stopped state.
+    func stopSession() {
+        endTime = Date()
+        session.endTime = endTime
+        session.breakTime = breakTimeMinutes
+        session.duration = max(0, endTime.timeIntervalSince(startTime) / 3600.0 - breakTimeMinutes / 60.0)
+        isSessionActive = false
+        prevEndTime = endTime
+        try? viewContext.save()
+    }
+
     func loadFromSession() {
         guard !loaded else { return }
         loaded = true
+        // Capture active state before setting up other fields
+        isSessionActive = session.isActive
         gameType = session.gameType ?? "No Limit Hold'em"
 
         if session.smallBlind > 0 || session.bigBlind > 0 {
@@ -499,7 +629,8 @@ struct OnlineSessionDetailView: View {
         tableSize = Int(session.tableSize)
         tables = Int(session.tables)
         startTime = session.startTime ?? Date()
-        endTime = session.endTime ?? Date()
+        // For active sessions, use a placeholder endTime that is NOT written back to Core Data
+        endTime = session.isActive ? Date() : (session.endTime ?? Date())
         prevStartTime = startTime
         prevEndTime = endTime
         balanceBefore = session.balanceBefore == 0 ? "" : String(format: "%.2f", session.balanceBefore)
@@ -509,6 +640,12 @@ struct OnlineSessionDetailView: View {
         selectedPlatform = session.platform
         if session.isActive, let start = session.startTime {
             elapsed = Date().timeIntervalSince(start)
+        }
+        // Only check balance discrepancy for completed (stopped) sessions
+        if !session.isActive {
+            checkDiscrepancy()
+        } else {
+            discrepancyResolved = true
         }
     }
 
@@ -524,8 +661,11 @@ struct OnlineSessionDetailView: View {
         session.tables = Int16(tables)
         session.breakTime = breakTimeMinutes
         session.startTime = startTime
-        session.endTime = endTime
-        session.duration = duration
+        // Only write endTime and duration once the session is stopped
+        if !isSessionActive {
+            session.endTime = endTime
+            session.duration = duration
+        }
         if !isVerified {
             session.balanceBefore = Double(balanceBefore) ?? 0
             session.balanceAfter = Double(balanceAfter) ?? 0

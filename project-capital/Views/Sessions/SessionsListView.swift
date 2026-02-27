@@ -243,7 +243,7 @@ struct SessionsListView: View {
                     date: s.sessionDate,
                     icon: "desktopcomputer",
                     title: s.platformName,
-                    subtitle: "\(s.displayGameType) \(s.displayBlinds)",
+                    subtitle: s.displayBlinds.isEmpty ? s.displayGameType : "\(s.displayGameType) \(s.displayBlinds)",
                     duration: s.computedDuration,
                     netResult: s.netProfitLossBase,
                     currency: baseCurrency,
@@ -270,7 +270,7 @@ struct SessionsListView: View {
                     date: s.sessionDate,
                     icon: "building.columns",
                     title: s.displayLocation,
-                    subtitle: "\(s.displayGameType) \(s.displayBlinds)",
+                    subtitle: s.displayBlinds.isEmpty ? s.displayGameType : "\(s.displayGameType) \(s.displayBlinds)",
                     duration: s.computedDuration,
                     netResult: s.netProfitLossBase,
                     currency: baseCurrency,
@@ -361,15 +361,22 @@ struct SessionRowView: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            VStack(alignment: .center, spacing: 2) {
-                Image(systemName: icon)
-                    .font(.system(size: 18))
-                    .foregroundColor(.appGold)
-                Text(AppFormatter.sessionDate(date))
-                    .font(.caption2)
-                    .foregroundColor(.appSecondary)
+            ZStack(alignment: .topLeading) {
+                VStack(alignment: .center, spacing: 2) {
+                    Image(systemName: icon)
+                        .font(.system(size: 18))
+                        .foregroundColor(.appGold)
+                    Text(AppFormatter.sessionDate(date))
+                        .font(.caption2)
+                        .foregroundColor(.appSecondary)
+                }
+                .frame(width: 52)
+                if isActive {
+                    Circle()
+                        .fill(Color(hex: "#34C759"))
+                        .frame(width: 10, height: 10)
+                }
             }
-            .frame(width: 52)
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 4) {

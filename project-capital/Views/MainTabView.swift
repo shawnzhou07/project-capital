@@ -38,7 +38,7 @@ struct MainTabView: View {
     }
 
     var body: some View {
-        TabView {
+        TabView(selection: $sessionCoordinator.selectedTab) {
             NavigationStack {
                 SessionsListView()
             }
@@ -46,6 +46,7 @@ struct MainTabView: View {
             .tabItem {
                 Label("Sessions", systemImage: "rectangle.stack.fill")
             }
+            .tag(0)
 
             NavigationStack {
                 StatsView()
@@ -54,6 +55,7 @@ struct MainTabView: View {
             .tabItem {
                 Label("Stats", systemImage: "chart.bar.fill")
             }
+            .tag(1)
 
             NavigationStack {
                 PlatformsListView()
@@ -62,6 +64,7 @@ struct MainTabView: View {
             .tabItem {
                 Label("Platforms", systemImage: "building.columns.fill")
             }
+            .tag(2)
 
             NavigationStack {
                 MoreView()
@@ -70,6 +73,7 @@ struct MainTabView: View {
             .tabItem {
                 Label("More", systemImage: "ellipsis")
             }
+            .tag(3)
         }
         .environmentObject(sessionCoordinator)
         .fullScreenCover(isPresented: $sessionCoordinator.isFormPresented) {

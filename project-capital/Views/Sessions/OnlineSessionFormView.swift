@@ -120,7 +120,7 @@ struct OnlineSessionFormView: View {
                     Text("Platform")
                         .foregroundColor(.appPrimary)
                     Spacer()
-                    Text(selectedPlatform?.displayName ?? "Select...")
+                    Text(selectedPlatform?.displayName ?? "Select")
                         .foregroundColor(selectedPlatform == nil ? .appSecondary : .appGold)
                     if selectedPlatform != nil {
                         Text("·").foregroundColor(.appSecondary)
@@ -378,6 +378,7 @@ struct OnlineSessionFormView: View {
 struct PlatformPickerSheet: View {
     let platforms: [Platform]
     @Binding var selected: Platform?
+    var onCreatePlatform: (() -> Void)? = nil
     let onSelect: () -> Void
     @Environment(\.dismiss) private var dismiss
 
@@ -385,32 +386,56 @@ struct PlatformPickerSheet: View {
         NavigationStack {
             ZStack {
                 Color.appBackground.ignoresSafeArea()
-                List {
-                    ForEach(platforms) { platform in
-                        Button {
-                            selected = platform
-                            onSelect()
-                        } label: {
-                            HStack {
-                                VStack(alignment: .leading) {
-                                    Text(platform.displayName)
-                                        .foregroundColor(.appPrimary)
-                                    Text(platform.displayCurrency)
-                                        .font(.caption)
-                                        .foregroundColor(.appSecondary)
-                                }
-                                Spacer()
-                                if selected == platform {
-                                    Image(systemName: "checkmark")
-                                        .foregroundColor(.appGold)
+                if platforms.isEmpty {
+                    VStack(spacing: 16) {
+                        Image(systemName: "building.columns")
+                            .font(.system(size: 40))
+                            .foregroundColor(.appSecondary)
+                        Text("No Platforms")
+                            .font(.headline)
+                            .foregroundColor(.appPrimary)
+                        Text("Add a platform to track your online bankroll")
+                            .font(.subheadline)
+                            .foregroundColor(.appSecondary)
+                            .multilineTextAlignment(.center)
+                        if let create = onCreatePlatform {
+                            Button("Create Platform") {
+                                create()
+                            }
+                            .foregroundColor(.appGold)
+                            .fontWeight(.medium)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding()
+                } else {
+                    List {
+                        ForEach(platforms) { platform in
+                            Button {
+                                selected = platform
+                                onSelect()
+                            } label: {
+                                HStack {
+                                    VStack(alignment: .leading) {
+                                        Text(platform.displayName)
+                                            .foregroundColor(.appPrimary)
+                                        Text(platform.displayCurrency)
+                                            .font(.caption)
+                                            .foregroundColor(.appSecondary)
+                                    }
+                                    Spacer()
+                                    if selected == platform {
+                                        Image(systemName: "checkmark")
+                                            .foregroundColor(.appGold)
+                                    }
                                 }
                             }
+                            .listRowBackground(Color.appSurface)
                         }
-                        .listRowBackground(Color.appSurface)
                     }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
                 }
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
             }
             .navigationTitle("Select Platform")
             .navigationBarTitleDisplayMode(.inline)

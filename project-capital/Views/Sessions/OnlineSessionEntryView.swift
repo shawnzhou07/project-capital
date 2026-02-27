@@ -40,6 +40,7 @@ struct OnlineSessionEntryView: View {
     @State private var showRequiredFieldsAlert = false
     @State private var showPlatformPicker = false
     @State private var showZeroDurationAlert = false
+    @State private var showNoPlatformAlert = false
     @State private var tick = Date()
     let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
@@ -106,15 +107,53 @@ struct OnlineSessionEntryView: View {
             .alert("Invalid Session Duration", isPresented: $showZeroDurationAlert) {
                 Button("OK", role: .cancel) {}
             } message: {
-                Text("Start time and end time result in zero or negative duration. Please correct the session times before saving.")
+                Text("Your session duration is zero or negative. Please correct your start time, end time, or break time before saving.")
+            }
+            .alert("Platform Required", isPresented: $showNoPlatformAlert) {
+                Button("Go to Platforms") {
+                    coordinator.shouldOpenAddPlatform = true
+                    coordinator.selectedTab = 2
+                    coordinator.dismissForm()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("You need to select a platform before starting an online session. Would you like to go to Platforms to create one?")
             }
             .alert(discrepancyAlertTitle, isPresented: $showBalanceDiscrepancy) {
                 if discrepancyDirection == .higher {
-                    Button("Add Deposit") { coordinator.dismissForm() }
-                    Button("Log Adjustment") { coordinator.dismissForm() }
+                    Button("Add Deposit") {
+                        saveDraftIfNeeded()
+                        if let platform = selectedPlatform {
+                            coordinator.platformIDForDeposit = platform.objectID
+                        }
+                        coordinator.selectedTab = 2
+                        coordinator.dismissForm()
+                    }
+                    Button("Log Adjustment") {
+                        saveDraftIfNeeded()
+                        if let platform = selectedPlatform {
+                            coordinator.adjustmentPlatformID = platform.objectID
+                        }
+                        coordinator.selectedTab = 3
+                        coordinator.dismissForm()
+                    }
                 } else {
-                    Button("Record Withdrawal") { coordinator.dismissForm() }
-                    Button("Log Adjustment") { coordinator.dismissForm() }
+                    Button("Record Withdrawal") {
+                        saveDraftIfNeeded()
+                        if let platform = selectedPlatform {
+                            coordinator.platformIDForWithdrawal = platform.objectID
+                        }
+                        coordinator.selectedTab = 2
+                        coordinator.dismissForm()
+                    }
+                    Button("Log Adjustment") {
+                        saveDraftIfNeeded()
+                        if let platform = selectedPlatform {
+                            coordinator.adjustmentPlatformID = platform.objectID
+                        }
+                        coordinator.selectedTab = 3
+                        coordinator.dismissForm()
+                    }
                 }
                 Button("OK", role: .cancel) {
                     let recorded = selectedPlatform?.currentBalance ?? 0
@@ -225,7 +264,7 @@ struct OnlineSessionEntryView: View {
                 HStack {
                     Text("Platform").foregroundColor(.appPrimary)
                     Spacer()
-                    Text(selectedPlatform?.displayName ?? "Select...")
+                    Text(selectedPlatform?.displayName ?? "Select")
                         .foregroundColor(selectedPlatform == nil ? .appSecondary : .appGold)
                     if selectedPlatform != nil {
                         Text("·").foregroundColor(.appSecondary)
@@ -239,7 +278,12 @@ struct OnlineSessionEntryView: View {
             Text("Platform").foregroundColor(.appGold).textCase(nil)
         }
         .sheet(isPresented: $showPlatformPicker) {
-            PlatformPickerSheet(platforms: Array(platforms), selected: $selectedPlatform) {
+            PlatformPickerSheet(platforms: Array(platforms), selected: $selectedPlatform, onCreatePlatform: {
+                showPlatformPicker = false
+                coordinator.shouldOpenAddPlatform = true
+                coordinator.selectedTab = 2
+                coordinator.dismissForm()
+            }) {
                 autoSaveIfActive()
                 showPlatformPicker = false
             }
@@ -321,8 +365,8 @@ struct OnlineSessionEntryView: View {
                 Spacer()
                 if entryState == .active {
                     HStack(spacing: 6) {
-                        Circle().fill(Color.appGold).frame(width: 6, height: 6)
-                        Text(elapsedText).foregroundColor(.appGold).fontWeight(.medium).monospacedDigit()
+                        Circle().fill(Color(hex: "#34C759")).frame(width: 6, height: 6)
+                        Text(elapsedText).foregroundColor(.appSecondary).fontWeight(.medium).monospacedDigit()
                     }
                 } else if entryState == .stopped {
                     Text(AppFormatter.duration(sessionDurationHours)).foregroundColor(.appSecondary)
@@ -410,8 +454,29 @@ struct OnlineSessionEntryView: View {
 
     // MARK: - Actions
 
+    func saveDraftIfNeeded() {
+        guard coreDataSession == nil, let platform = selectedPlatform else { return }
+        let session = OnlineCash(context: viewContext)
+        session.id = UUID()
+        session.platform = platform
+        session.gameType = gameType
+        session.smallBlind = sbDouble
+        session.bigBlind = bbDouble
+        session.straddle = Double(straddle) ?? 0
+        session.ante = Double(ante) ?? 0
+        session.blinds = "\(AppFormatter.blindValue(sbDouble))/\(AppFormatter.blindValue(bbDouble))"
+        session.tableSize = Int16(tableSize)
+        session.tables = Int16(tables)
+        session.balanceBefore = Double(balanceBefore) ?? 0
+        session.balanceAfter = Double(balanceAfter) ?? 0
+        session.exchangeRateToBase = platform.latestFXConversionRate
+        session.notes = notes.isEmpty ? nil : notes
+        try? viewContext.save()
+        coreDataSession = session
+    }
+
     func handleStart() {
-        guard let platform = selectedPlatform else { return }
+        guard let platform = selectedPlatform else { showNoPlatformAlert = true; return }
         startTime = Date()
         let session = OnlineCash(context: viewContext)
         session.id = UUID()

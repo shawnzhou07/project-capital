@@ -6,6 +6,8 @@ struct AddAdjustmentView: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage("baseCurrency") private var baseCurrency = "CAD"
 
+    var initialPlatform: Platform? = nil
+
     @FetchRequest(
         sortDescriptors: [NSSortDescriptor(keyPath: \Platform.name, ascending: true)],
         animation: .default
@@ -57,6 +59,10 @@ struct AddAdjustmentView: View {
             }
             .onAppear {
                 currency = baseCurrency
+                if let ip = initialPlatform {
+                    isOnline = true
+                    selectedPlatform = ip
+                }
             }
             .alert("Permanently Save Adjustment?", isPresented: $showLockConfirmation) {
                 Button("Confirm") { saveAdjustment() }
