@@ -32,13 +32,20 @@ struct FloatingSessionBar: View {
     }
 
     private var isVisible: Bool {
-        session != nil && !coordinator.isFormPresented
+        session != nil && !coordinator.isFormPresented && !coordinator.isViewingActiveSessionDetail
     }
 
     var body: some View {
         if isVisible, let info = session {
             Button {
-                coordinator.openActiveSession()
+                // Navigate to the canonical detail view in the Sessions tab,
+                // which is identical to tapping the session row in the list.
+                if let live = activeLive.first {
+                    coordinator.navigateToActiveLiveSession = live
+                } else if let online = activeOnline.first {
+                    coordinator.navigateToActiveOnlineSession = online
+                }
+                coordinator.selectedTab = 0
             } label: {
                 HStack(spacing: 10) {
                     Circle()

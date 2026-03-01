@@ -1,18 +1,6 @@
 import SwiftUI
 import CoreData
 
-private enum AdjTypeFilter: String, CaseIterable {
-    case all = "All"
-    case online = "Online"
-    case live = "Live"
-}
-
-private enum AdjSignFilter: String, CaseIterable {
-    case all = "All"
-    case positive = "+"
-    case negative = "−"
-}
-
 private enum AdjDateFilter: String, CaseIterable {
     case allTime = "All Time"
     case thisMonth = "This Month"
@@ -29,24 +17,10 @@ struct AdjustmentsListView: View {
     ) private var adjustments: FetchedResults<Adjustment>
 
     @State private var showAddAdjustment = false
-    @State private var typeFilter: AdjTypeFilter = .all
-    @State private var signFilter: AdjSignFilter = .all
     @State private var dateFilter: AdjDateFilter = .allTime
 
     var filteredAdjustments: [Adjustment] {
         var result = Array(adjustments)
-
-        switch typeFilter {
-        case .online: result = result.filter { $0.isOnline }
-        case .live:   result = result.filter { !$0.isOnline }
-        case .all:    break
-        }
-
-        switch signFilter {
-        case .positive: result = result.filter { $0.amountBase > 0 }
-        case .negative: result = result.filter { $0.amountBase < 0 }
-        case .all:      break
-        }
 
         let calendar = Calendar.current
         let now = Date()
@@ -106,38 +80,17 @@ struct AdjustmentsListView: View {
     }
 
     var filterBar: some View {
-        VStack(spacing: 6) {
-            // Row 1: Type + Sign
-            HStack(spacing: 8) {
-                ForEach(AdjTypeFilter.allCases, id: \.self) { f in
-                    FilterChip(label: f.rawValue, isSelected: typeFilter == f) {
-                        typeFilter = f
-                    }
-                }
-                Divider()
-                    .frame(height: 20)
-                    .background(Color.appBorder)
-                ForEach(AdjSignFilter.allCases, id: \.self) { f in
-                    FilterChip(label: f.rawValue, isSelected: signFilter == f) {
-                        signFilter = f
-                    }
-                }
-                Spacer()
-            }
-            .padding(.horizontal)
-
-            // Row 2: Date
+        ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(AdjDateFilter.allCases, id: \.self) { f in
                     FilterChip(label: f.rawValue, isSelected: dateFilter == f) {
                         dateFilter = f
                     }
                 }
-                Spacer()
             }
             .padding(.horizontal)
+            .padding(.vertical, 8)
         }
-        .padding(.vertical, 8)
         .background(Color.appBackground)
     }
 
@@ -182,7 +135,7 @@ struct AdjustmentsListView: View {
             Text("No Adjustments")
                 .font(.headline)
                 .foregroundColor(.appPrimary)
-            Text("Record financial corrections and miscellaneous entries")
+            Text("Record balance corrections for your online platforms")
                 .font(.subheadline)
                 .foregroundColor(.appSecondary)
                 .multilineTextAlignment(.center)
@@ -196,7 +149,7 @@ struct AdjustmentsListView: View {
             Image(systemName: "line.3.horizontal.decrease.circle")
                 .font(.system(size: 40))
                 .foregroundColor(.appSecondary)
-            Text("No matching adjustments")
+            Text("No adjustments in this period")
                 .font(.subheadline)
                 .foregroundColor(.appSecondary)
         }
@@ -220,23 +173,21 @@ struct AdjustmentRowView: View {
                     Text(AppFormatter.shortDate(adjustment.date ?? Date()))
                         .font(.caption)
                         .foregroundColor(.appSecondary)
-                    if adjustment.isOnline, let platform = adjustment.platform {
+                    if let platform = adjustment.platform {
                         Text("·").foregroundColor(.appSecondary)
                         Text(platform.displayName).font(.caption).foregroundColor(.appSecondary)
-                    } else if let location = adjustment.location, !location.isEmpty {
-                        Text("·").foregroundColor(.appSecondary)
-                        Text(location).font(.caption).foregroundColor(.appSecondary)
                     }
                 }
             }
             Spacer()
+            let adjCurrency = adjustment.currency ?? baseCurrency
             VStack(alignment: .trailing, spacing: 2) {
-                Text(AppFormatter.currencySigned(adjustment.amountBase, code: baseCurrency))
+                Text(AppFormatter.currencySigned(adjustment.amount, code: adjCurrency))
                     .font(.subheadline)
                     .fontWeight(.semibold)
-                    .foregroundColor(adjustment.amountBase.profitColor)
-                if adjustment.currency != baseCurrency {
-                    Text(AppFormatter.currencySigned(adjustment.amount, code: adjustment.currency ?? ""))
+                    .foregroundColor(adjustment.amount.profitColor)
+                if adjCurrency != baseCurrency {
+                    Text(AppFormatter.currencySigned(adjustment.amountBase, code: baseCurrency))
                         .font(.caption)
                         .foregroundColor(.appSecondary)
                 } else {

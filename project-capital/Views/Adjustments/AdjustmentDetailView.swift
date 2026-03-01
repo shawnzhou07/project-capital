@@ -33,18 +33,17 @@ struct AdjustmentDetailView: View {
     var lockedSection: some View {
         Section {
             lockedRow(label: "Amount", value: AppFormatter.currencySigned(adjustment.amount, code: adjustment.currency ?? baseCurrency))
-            lockedRow(label: "In \(baseCurrency)", value: AppFormatter.currencySigned(adjustment.amountBase, code: baseCurrency))
+            if let currency = adjustment.currency, currency != baseCurrency {
+                lockedRow(label: "In \(baseCurrency)", value: AppFormatter.currencySigned(adjustment.amountBase, code: baseCurrency))
+            }
             lockedRow(label: "Date", value: AppFormatter.shortDate(adjustment.date ?? Date()))
-            lockedRow(label: "Currency", value: adjustment.currency ?? baseCurrency)
-            if adjustment.isOnline, let platform = adjustment.platform {
+            if let platform = adjustment.platform {
                 lockedRow(label: "Platform", value: platform.displayName)
-            } else if let location = adjustment.location, !location.isEmpty {
-                lockedRow(label: "Location", value: location)
             }
         } header: {
             Text("Details").foregroundColor(.appGold).textCase(nil)
         } footer: {
-            Text("Amount, date, currency, and platform are permanently locked.")
+            Text("Amount, date, and platform are permanently locked.")
                 .foregroundColor(.appSecondary)
         }
     }
@@ -124,15 +123,14 @@ struct AdjustmentDetailView: View {
             let ctx = PersistenceController.preview.container.viewContext
             let a = Adjustment(context: ctx)
             a.id = UUID()
-            a.name = "Discrepancy Fix"
+            a.name = "Deposit correction"
             a.amount = 50
             a.amountBase = 68
             a.date = Date()
             a.currency = "USD"
             a.exchangeRateToBase = 1.36
-            a.isOnline = false
-            a.location = "Casino Niagara"
-            a.notes = "Rake adjustment"
+            a.isOnline = true
+            a.notes = "Balance adjustment"
             return a
         }())
     }

@@ -6,9 +6,12 @@ struct PlatformDetailView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @AppStorage("baseCurrency") private var baseCurrency = "CAD"
 
+    @EnvironmentObject var coordinator: ActiveSessionCoordinator
+
     @State private var balanceStr = ""
     @State private var showDeposit = false
     @State private var showWithdrawal = false
+    @State private var showAdjustment = false
     @State private var showDeleteAlert = false
     @State private var loaded = false
     @Environment(\.dismiss) private var dismiss
@@ -52,6 +55,10 @@ struct PlatformDetailView: View {
         }
         .sheet(isPresented: $showWithdrawal) {
             WithdrawalFormView(platform: platform)
+        }
+        .sheet(isPresented: $showAdjustment) {
+            AddAdjustmentView(initialPlatform: platform)
+                .environmentObject(coordinator)
         }
         .alert("Delete Platform?", isPresented: $showDeleteAlert) {
             Button("Delete", role: .destructive) {
@@ -160,6 +167,19 @@ struct PlatformDetailView: View {
                     .background(Color.appSurface)
                     .cornerRadius(8)
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.appLoss.opacity(0.4), lineWidth: 1))
+            }
+            Button {
+                showAdjustment = true
+            } label: {
+                Label("Adjust", systemImage: "plusminus.circle.fill")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(.appGold)
+                    .frame(maxWidth: .infinity)
+                    .padding(10)
+                    .background(Color.appSurface)
+                    .cornerRadius(8)
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.appGold.opacity(0.4), lineWidth: 1))
             }
         }
     }

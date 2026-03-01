@@ -40,6 +40,7 @@ struct MoreView: View {
             if let p = directAdjustmentPlatform {
                 AddAdjustmentView(initialPlatform: p)
                     .environment(\.managedObjectContext, viewContext)
+                    .environmentObject(coordinator)
             }
         }
     }

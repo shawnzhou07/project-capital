@@ -166,6 +166,13 @@ struct SessionsListView: View {
         .navigationDestination(item: $navigateToUnverifiedLive) { session in
             LiveSessionDetailView(session: session)
         }
+        // Floating bar tap routes here — same view as tapping the row directly.
+        .navigationDestination(item: $sessionCoordinator.navigateToActiveLiveSession) { session in
+            LiveSessionDetailView(session: session)
+        }
+        .navigationDestination(item: $sessionCoordinator.navigateToActiveOnlineSession) { session in
+            OnlineSessionDetailView(session: session)
+        }
     }
 
     var filterBar: some View {

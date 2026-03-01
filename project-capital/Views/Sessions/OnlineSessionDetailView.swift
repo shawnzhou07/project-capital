@@ -85,7 +85,9 @@ struct OnlineSessionDetailView: View {
     private var mainZStack: some View {
         ZStack {
             Color.appBackground.ignoresSafeArea()
-            if isVerified {
+            // Only show the gold border for verified sessions that are fully stopped.
+            // Active sessions (endTime == nil) must never show the border.
+            if isVerified && session.endTime != nil {
                 RoundedRectangle(cornerRadius: 0)
                     .stroke(Color.appGold.opacity(0.35), lineWidth: 2.0)
                     .ignoresSafeArea()
@@ -119,19 +121,36 @@ struct OnlineSessionDetailView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 if isSessionActive {
+                    // Green dot appears directly to the right of the title text.
+                    // .principal placement centers the title+dot in the nav bar.
+                    ToolbarItem(placement: .principal) {
+                        HStack(spacing: 0) {
+                            Text("Online Session")
+                                .font(.headline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.white)
+                            Circle()
+                                .fill(Color(hex: "#34C759"))
+                                .frame(width: 10, height: 10)
+                                .padding(.leading, 6)
+                        }
+                    }
+                    // Stop button is a separate trailing item with no dot inside it.
                     ToolbarItem(placement: .navigationBarTrailing) {
                         Button("Stop") { stopSession() }
                             .fontWeight(.semibold)
                             .foregroundColor(.appLoss)
                     }
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        Image(systemName: "circle.fill")
-                            .font(.system(size: 10))
-                            .foregroundColor(Color(hex: "#34C759"))
-                    }
                 }
             }
-            .onAppear { loadFromSession() }
+            .onAppear {
+                loadFromSession()
+                // Hide the floating bar while viewing the currently active session.
+                if session.isActive { coordinator.isViewingActiveSessionDetail = true }
+            }
+            .onDisappear {
+                coordinator.isViewingActiveSessionDetail = false
+            }
             .onChange(of: gameType) { _, _ in autoSave() }
             .onChange(of: smallBlind) { _, _ in autoSave() }
             .onChange(of: bigBlind) { _, _ in autoSave() }
@@ -308,14 +327,6 @@ struct OnlineSessionDetailView: View {
                     Label(AppFormatter.handsCount(session.effectiveHands) + " hands", systemImage: "suit.spade")
                 }
                 .font(.subheadline).foregroundColor(.appSecondary)
-                if session.isActive {
-                    HStack {
-                        Circle().fill(Color.appProfit).frame(width: 8, height: 8)
-                        Text("Live — \(AppFormatter.duration(elapsed / 3600))")
-                            .font(.caption).foregroundColor(.appProfit)
-                    }
-                    .onReceive(timer) { _ in elapsed += 1 }
-                }
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
@@ -413,6 +424,7 @@ struct OnlineSessionDetailView: View {
                             .foregroundColor(.appSecondary)
                             .monospacedDigit()
                     }
+                    .onReceive(timer) { _ in elapsed += 1 }
                 } else {
                     Text(AppFormatter.duration(duration)).foregroundColor(.appSecondary)
                 }

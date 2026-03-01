@@ -4,8 +4,10 @@ import CoreData
 struct AddAdjustmentView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject var coordinator: ActiveSessionCoordinator
     @AppStorage("baseCurrency") private var baseCurrency = "CAD"
 
+    /// Pre-selected and locked platform (from platform detail or discrepancy redirect).
     var initialPlatform: Platform? = nil
 
     @FetchRequest(
@@ -16,38 +18,41 @@ struct AddAdjustmentView: View {
     @State private var name = ""
     @State private var amount = ""
     @State private var date = Date()
-    @State private var currency = "CAD"
-    @State private var exchangeRate = ""
-    @State private var isOnline = false
     @State private var selectedPlatform: Platform? = nil
-    @State private var location = ""
     @State private var notes = ""
-    @State private var showLockConfirmation = false
+    @State private var showSaveConfirmation = false
 
+    var isInitialPlatformLocked: Bool { initialPlatform != nil }
     var amountDouble: Double { Double(amount) ?? 0 }
-    var exchangeRateDouble: Double { Double(exchangeRate) ?? 1.0 }
-    var amountBase: Double { amountDouble * exchangeRateDouble }
-    var isSameCurrency: Bool { currency == baseCurrency }
-
+    var platformCurrency: String { selectedPlatform?.displayCurrency ?? baseCurrency }
+    var conversionRate: Double { selectedPlatform?.latestFXConversionRate ?? 1.0 }
+    var amountBase: Double { amountDouble * conversionRate }
     var isValid: Bool {
-        !name.isEmpty && amountDouble != 0
+        !name.trimmingCharacters(in: .whitespaces).isEmpty && amountDouble != 0 && selectedPlatform != nil
     }
-
-    let commonNames = ["Discrepancy Fix", "Coaching Fee", "Transfer Error", "Other"]
 
     var body: some View {
         NavigationStack {
             ZStack {
                 Color.appBackground.ignoresSafeArea()
-                Form {
-                    nameSection
-                    amountSection
-                    typeSection
-                    notesSection
-                    saveSection
+                // Show empty state when no platforms exist and none was pre-selected.
+                if platforms.isEmpty && initialPlatform == nil {
+                    noPlatformsState
+                } else {
+                    Form {
+                        nameSection
+                        amountSection
+                        if isInitialPlatformLocked {
+                            lockedPlatformSection
+                        } else {
+                            platformSection
+                        }
+                        notesSection
+                        saveSection
+                    }
+                    .scrollContentBackground(.hidden)
+                    .background(Color.appBackground)
                 }
-                .scrollContentBackground(.hidden)
-                .background(Color.appBackground)
             }
             .navigationTitle("New Adjustment")
             .navigationBarTitleDisplayMode(.inline)
@@ -58,62 +63,88 @@ struct AddAdjustmentView: View {
                 }
             }
             .onAppear {
-                currency = baseCurrency
                 if let ip = initialPlatform {
-                    isOnline = true
                     selectedPlatform = ip
                 }
             }
-            .alert("Permanently Save Adjustment?", isPresented: $showLockConfirmation) {
-                Button("Confirm") { saveAdjustment() }
+            .alert("Save Adjustment?", isPresented: $showSaveConfirmation) {
+                Button("Save") { saveAdjustment() }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("This adjustment will be permanently saved and cannot be edited or deleted after confirmation. Are you sure?")
+                Text("This adjustment will be permanently saved and cannot be edited or deleted after confirmation.")
             }
         }
     }
 
+    // MARK: - No Platforms State
+
+    var noPlatformsState: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "building.columns")
+                .font(.system(size: 48))
+                .foregroundColor(.appSecondary)
+            Text("No Platforms Available")
+                .font(.headline)
+                .foregroundColor(.appPrimary)
+            Text("Adjustments must be linked to an online platform. Please add a platform first.")
+                .font(.subheadline)
+                .foregroundColor(.appSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+            Button {
+                dismiss()
+                coordinator.shouldOpenAddPlatform = true
+                coordinator.selectedTab = 2
+            } label: {
+                Text("Go to Platforms")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.black)
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 10)
+                    .background(Color.appGold)
+                    .cornerRadius(8)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Name
+
     var nameSection: some View {
         Section {
-            TextField("Name", text: $name)
+            TextField("e.g. Deposit correction, Transfer error", text: $name)
                 .foregroundColor(.appPrimary)
                 .listRowBackground(Color.appSurface)
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(commonNames, id: \.self) { suggestion in
-                        Button {
-                            name = suggestion
-                        } label: {
-                            Text(suggestion)
-                                .font(.caption)
-                                .foregroundColor(name == suggestion ? .black : .appSecondary)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 5)
-                                .background(name == suggestion ? Color.appGold : Color.appSurface2)
-                                .cornerRadius(12)
-                        }
-                    }
-                }
-                .padding(.vertical, 4)
-            }
-            .listRowBackground(Color.appSurface)
-            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
         } header: {
             Text("Name").foregroundColor(.appGold).textCase(nil)
         }
     }
 
+    // MARK: - Amount
+
     var amountSection: some View {
         Section {
             HStack {
-                Text("Amount")
-                    .foregroundColor(.appPrimary)
-                Text("(negative = cost)")
-                    .font(.caption)
-                    .foregroundColor(.appSecondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Amount").foregroundColor(.appPrimary)
+                    Text("Positive adds to balance, negative subtracts")
+                        .font(.caption2)
+                        .foregroundColor(.appSecondary)
+                }
                 Spacer()
                 CurrencyInputField(text: $amount, width: 100, textColor: .appGold, allowsNegative: true)
+            }
+            .listRowBackground(Color.appSurface)
+
+            // Currency is locked to the selected platform's currency.
+            HStack {
+                Text("Currency").foregroundColor(.appSecondary)
+                Spacer()
+                Text(platformCurrency).foregroundColor(.appSecondary)
+                Image(systemName: "lock.fill")
+                    .font(.caption2)
+                    .foregroundColor(.appSecondary)
             }
             .listRowBackground(Color.appSurface)
 
@@ -122,30 +153,10 @@ struct AddAdjustmentView: View {
                 .tint(.appGold)
                 .listRowBackground(Color.appSurface)
 
-            Picker("Currency", selection: $currency) {
-                ForEach(supportedCurrencies, id: \.self) { Text($0).tag($0) }
-            }
-            .foregroundColor(.appPrimary)
-            .tint(.appGold)
-            .listRowBackground(Color.appSurface)
-
-            if !isSameCurrency {
+            // Show base currency equivalent only for foreign-currency platforms.
+            if amountDouble != 0 && platformCurrency != baseCurrency {
                 HStack {
-                    Text("Exchange Rate")
-                        .foregroundColor(.appPrimary)
-                    Spacer()
-                    CurrencyInputField(text: $exchangeRate, width: 100, maxDecimalPlaces: 4, textColor: .appGold)
-                    Text("\(currency)/\(baseCurrency)")
-                        .font(.caption)
-                        .foregroundColor(.appSecondary)
-                }
-                .listRowBackground(Color.appSurface)
-            }
-
-            if amountDouble != 0 {
-                HStack {
-                    Text("In \(baseCurrency)")
-                        .foregroundColor(.appSecondary)
+                    Text("In \(baseCurrency)").foregroundColor(.appSecondary)
                     Spacer()
                     Text(AppFormatter.currencySigned(amountBase, code: baseCurrency))
                         .foregroundColor(amountBase.profitColor)
@@ -157,47 +168,44 @@ struct AddAdjustmentView: View {
         }
     }
 
-    var typeSection: some View {
+    // MARK: - Platform Picker (when not pre-locked)
+
+    var platformSection: some View {
         Section {
-            Toggle(isOn: $isOnline) {
-                Text("Online Platform")
-                    .foregroundColor(.appPrimary)
+            Picker("Platform", selection: $selectedPlatform) {
+                Text("Select Platform").tag(Platform?.none)
+                ForEach(Array(platforms)) { platform in
+                    Text(platform.displayName).tag(Optional(platform))
+                }
             }
+            .foregroundColor(.appPrimary)
             .tint(.appGold)
             .listRowBackground(Color.appSurface)
-
-            if isOnline {
-                if platforms.isEmpty {
-                    Text("No platforms added yet.")
-                        .font(.caption)
-                        .foregroundColor(.appSecondary)
-                        .listRowBackground(Color.appSurface)
-                } else {
-                    Picker("Platform", selection: $selectedPlatform) {
-                        Text("None").tag(Platform?.none)
-                        ForEach(Array(platforms)) { platform in
-                            Text(platform.displayName).tag(Optional(platform))
-                        }
-                    }
-                    .foregroundColor(.appPrimary)
-                    .tint(.appGold)
-                    .listRowBackground(Color.appSurface)
-                }
-            } else {
-                HStack {
-                    Text("Location (optional)")
-                        .foregroundColor(.appPrimary)
-                    Spacer()
-                    TextField("Casino / location", text: $location)
-                        .multilineTextAlignment(.trailing)
-                        .foregroundColor(.appGold)
-                }
-                .listRowBackground(Color.appSurface)
-            }
         } header: {
-            Text("Type").foregroundColor(.appGold).textCase(nil)
+            Text("Platform").foregroundColor(.appGold).textCase(nil)
         }
     }
+
+    // MARK: - Locked Platform Row
+
+    var lockedPlatformSection: some View {
+        Section {
+            HStack {
+                Text("Platform").foregroundColor(.appPrimary)
+                Spacer()
+                Image(systemName: "lock.fill")
+                    .font(.caption)
+                    .foregroundColor(.appGold)
+                Text(selectedPlatform?.displayName ?? "—")
+                    .foregroundColor(.appPrimary)
+            }
+            .listRowBackground(Color.appSurface)
+        } header: {
+            Text("Platform").foregroundColor(.appGold).textCase(nil)
+        }
+    }
+
+    // MARK: - Notes
 
     var notesSection: some View {
         Section {
@@ -212,10 +220,12 @@ struct AddAdjustmentView: View {
         }
     }
 
+    // MARK: - Save Button
+
     var saveSection: some View {
         Section {
             Button {
-                showLockConfirmation = true
+                showSaveConfirmation = true
             } label: {
                 Text("Save Adjustment")
                     .font(.headline)
@@ -228,24 +238,26 @@ struct AddAdjustmentView: View {
         }
     }
 
+    // MARK: - Save Logic
+
     func saveAdjustment() {
+        guard let platform = selectedPlatform else { return }
         let adjustment = Adjustment(context: viewContext)
         adjustment.id = UUID()
-        adjustment.name = name
+        adjustment.name = name.trimmingCharacters(in: .whitespaces)
         adjustment.amount = amountDouble
         adjustment.date = date
-        adjustment.currency = currency
-        adjustment.exchangeRateToBase = exchangeRateDouble
+        // Currency is always locked to the linked platform's currency.
+        adjustment.currency = platform.displayCurrency
+        adjustment.exchangeRateToBase = conversionRate
         adjustment.amountBase = amountBase
-        adjustment.isOnline = isOnline
-        adjustment.platform = isOnline ? selectedPlatform : nil
-        adjustment.location = isOnline ? nil : (location.isEmpty ? nil : location)
+        adjustment.isOnline = true
+        adjustment.platform = platform
+        adjustment.location = nil
         adjustment.notes = notes.isEmpty ? nil : notes
 
-        // Update platform balance for online platform-linked adjustments
-        if isOnline, let platform = selectedPlatform {
-            platform.currentBalance += amountDouble
-        }
+        // Apply directly to the platform's current balance.
+        platform.currentBalance += amountDouble
 
         do {
             try viewContext.save()
@@ -259,5 +271,6 @@ struct AddAdjustmentView: View {
 #Preview {
     AddAdjustmentView()
         .environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
+        .environmentObject(ActiveSessionCoordinator())
         .preferredColorScheme(.dark)
 }
